@@ -6,7 +6,7 @@ include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "Cargo.toml"]
 rust-version = "1.81"
 
 [[bin]]
-name = "social_media_sanbox_bin"
+name = "social_media_sandbox_bin"
 path = "src/main.rs"
 
 [package.metadata.docs.rs]
@@ -31,6 +31,7 @@ getrandom = { version = "0.2", features = ["js"] }
 serde = { version = "1", features = ["derive"] }
 chrono = "0.4.39"
 nalgebra = "0.33.2"
+num-rational = "0.4.2"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
