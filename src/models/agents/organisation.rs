@@ -10,12 +10,16 @@ pub struct Organisation {
 }
 
 impl Agent for Organisation {
-    fn tick(&mut self, engine: &RecommendationEngine) -> Option<Content> {
+    fn tick(
+        &mut self,
+        engine: &RecommendationEngine,
+        config: &SimulationConfig,
+    ) -> Option<Content> {
         match self.core.activity {
             Activity::Creating(ref mut creation_state) => {
                 creation_state.ticks_spent += 1;
                 if creation_state.ticks_spent >= creation_state.ticks_required {
-                    let content = self.core.generate_content(engine);
+                    let content = self.core.generate_content(engine, config);
                     self.core.activity = self.new_creation();
                     return Some(content);
                 } else {

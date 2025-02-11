@@ -16,7 +16,11 @@ pub struct Individual {
 }
 
 impl Agent for Individual {
-    fn tick(&mut self, engine: &RecommendationEngine) -> Option<Content> {
+    fn tick(
+        &mut self,
+        engine: &RecommendationEngine,
+        config: &SimulationConfig,
+    ) -> Option<Content> {
         self.decay_preferences();
 
         match self.core.activity {
@@ -30,7 +34,7 @@ impl Agent for Individual {
             Activity::Creating(ref mut creation_state) => {
                 creation_state.ticks_spent += 1;
                 if creation_state.ticks_spent >= creation_state.ticks_required {
-                    let content = self.core.generate_content(engine);
+                    let content = self.core.generate_content(engine, config);
                     self.core.activity = self.create_or_consume(engine);
                     return Some(content);
                 }
@@ -90,7 +94,7 @@ impl Individual {
         Self {
             core: AgentCore {
                 id,
-                content_creation_frequency: random(),
+                content_creation_frequency: random::<f32>().min(0.3),
                 created_content: Vec::new(),
                 create_speed: random(),
                 activity: Activity::Offline,

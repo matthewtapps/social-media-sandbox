@@ -1,3 +1,4 @@
+use crate::models::SimulationConfig;
 use crate::{Content, RecommendationEngine};
 use nalgebra::DVector;
 use rand::{random, RngCore};
@@ -6,7 +7,8 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub trait Agent: Debug + Any {
-    fn tick(&mut self, engine: &RecommendationEngine) -> Option<Content>;
+    fn tick(&mut self, engine: &RecommendationEngine, config: &SimulationConfig)
+        -> Option<Content>;
 
     fn clone_box(&self) -> Box<dyn Agent>;
 
@@ -71,7 +73,11 @@ pub struct ContentConsumptionState {
 }
 
 impl AgentCore {
-    pub fn generate_content(&self, engine: &RecommendationEngine) -> Content {
+    pub fn generate_content(
+        &self,
+        engine: &RecommendationEngine,
+        config: &SimulationConfig,
+    ) -> Content {
         let selected_tags: Vec<String> = self
             .interests
             .iter()
@@ -86,7 +92,7 @@ impl AgentCore {
             timestamp: chrono::Utc::now().timestamp(),
             engagement_score: 0.0,
             vector_representation: engine.vectorize_tags(&selected_tags),
-            length: random(),
+            length: (random::<f32>() * config.max_content_length as f32) as i32,
         }
     }
 }

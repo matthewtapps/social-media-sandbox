@@ -31,7 +31,7 @@ impl<'a> Default for SimulationConfig<'a> {
             max_content_length: 60,
             creator_preference_increment: 0.1,
             long_content_interest_multiplier: 1.5,
-            bot_creation_ticks: 1,
+            bot_creation_ticks: 2,
             sample_tags: vec![
                 "politics",
                 "technology",
@@ -114,7 +114,7 @@ impl<'a> Simulation<'a> {
         let mut new_content = Vec::new();
 
         for agent in self.agents.iter_mut() {
-            let content = agent.tick(&self.engine);
+            let content = agent.tick(&self.engine, &self.config);
             match content {
                 Some(content) => new_content.push(content),
                 _ => (),
