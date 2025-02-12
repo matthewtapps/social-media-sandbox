@@ -11,8 +11,9 @@ pub struct Individual {
     pub attention_span: f32,       // 1 = will read any length of post, 0 = just reads headlines
     pub preferred_creators: HashMap<usize, f32>, // The ID of the creator, and a f32 weight
     pub viewed_content: Vec<usize>,
-    pub bias_factor: f32,
-    pub consume_speed: f32,
+    pub bias_factor: f32, // 1 = consumed content has full effect on interests, 0 = interests never change
+    pub decay_factor: f32, // 1 = full interest decay speed of 1% per tick, 0 = no decay
+    pub consume_speed: f32, // 1 = fastest consume speed, 0 = will never finish
 }
 
 impl Agent for Individual {
@@ -27,7 +28,7 @@ impl Agent for Individual {
             Activity::Offline => {
                 // Use next post likelihood for whether to come back online
                 if random::<f32>() < self.next_post_likelihood {
-                    self.core.activity = self.create_or_consume(engine);
+                    self.core.activity = self.create_or_consume(engine, config);
                 }
             }
 
@@ -35,23 +36,26 @@ impl Agent for Individual {
                 creation_state.ticks_spent += 1;
                 if creation_state.ticks_spent >= creation_state.ticks_required {
                     let content = self.core.generate_content(engine, config);
-                    self.core.activity = self.create_or_consume(engine);
+                    self.core.activity = self.create_or_consume(engine, config);
                     return Some(content);
                 }
             }
 
             Activity::Consuming(ref mut consumption_state) => {
                 consumption_state.ticks_spent += 1;
-                if consumption_state.ticks_spent >= consumption_state.ticks_required {
+                if consumption_state.ticks_spent >= consumption_state.ticks_required
+                    || random::<f32>() > self.attention_span
+                {
                     let content_id = consumption_state.content_id;
                     let creator_id = consumption_state.creator_id;
+                    let ticks_spent = consumption_state.ticks_spent;
 
                     self.viewed_content.push(consumption_state.creator_id);
 
-                    self.update_interests(engine, content_id);
-                    self.update_preferred_creators(creator_id);
+                    self.update_interests(engine, content_id, ticks_spent);
+                    self.update_preferred_creators(creator_id, ticks_spent);
 
-                    self.core.activity = self.create_or_consume(engine)
+                    self.core.activity = self.create_or_consume(engine, config)
                 }
             }
         }
@@ -77,6 +81,10 @@ impl Agent for Individual {
     fn activity(&self) -> &Activity {
         &self.core.activity
     }
+
+    fn id(&self) -> &usize {
+        &self.core.id
+    }
 }
 
 impl Individual {
@@ -84,7 +92,8 @@ impl Individual {
         let mut interests = HashMap::new();
 
         for _ in 0..config.starting_tags.bot {
-            let tag = config.sample_tags[rand::thread_rng().gen_range(0..config.sample_tags.len())];
+            let tag =
+                &config.sample_tags[rand::thread_rng().gen_range(0..config.sample_tags.len())];
             interests.insert(tag.to_string(), 1.0);
         }
 
@@ -107,21 +116,23 @@ impl Individual {
             viewed_content: Vec::new(),
             bias_factor: random(),
             consume_speed: random(),
+            decay_factor: random(),
         }
     }
+
     fn should_generate_content(&self) -> bool {
-        let roll = random::<f32>();
-        let should_generate = random::<f32>() < self.core.content_creation_frequency;
-        println!(
-            "Generation roll: {:?}, Frequency: {:?}",
-            roll, self.core.content_creation_frequency
-        );
-        return should_generate;
+        return random::<f32>() < self.core.content_creation_frequency;
     }
 
-    fn create_or_consume(&self, engine: &RecommendationEngine) -> Activity {
+    fn create_or_consume(
+        &self,
+        engine: &RecommendationEngine,
+        config: &SimulationConfig,
+    ) -> Activity {
         if self.should_generate_content() {
-            let ticks_required = (random::<f32>() * 30.0 / self.core.create_speed) as i32;
+            let ticks_required = (random::<f32>()
+                * config.base_content_length as f32
+                * self.core.create_speed) as i32;
             return Activity::Creating(ContentCreationState {
                 content_id: rand::thread_rng().next_u32() as usize,
                 ticks_spent: 0,
@@ -146,27 +157,32 @@ impl Individual {
         }
     }
 
-    fn update_interests(&mut self, engine: &RecommendationEngine, content_id: usize) {
+    fn update_interests(
+        &mut self,
+        engine: &RecommendationEngine,
+        content_id: usize,
+        ticks_spent: i32,
+    ) {
         if let Some(content) = engine.get_content_by_id(content_id) {
             for tag in &content.tags {
                 let interest = self.core.interests.entry(tag.to_string()).or_insert(0.0);
-                *interest += 0.1;
+                *interest += 0.05 * self.bias_factor * ticks_spent as f32;
             }
         }
     }
 
-    fn update_preferred_creators(&mut self, creator_id: usize) {
+    fn update_preferred_creators(&mut self, creator_id: usize, ticks_spent: i32) {
         let weight = self.preferred_creators.entry(creator_id).or_insert(0.0);
-        *weight += 0.1;
+        *weight += 0.05 * self.bias_factor * ticks_spent as f32;
     }
 
     fn decay_preferences(&mut self) {
         for interest in self.core.interests.values_mut() {
-            *interest *= 0.99;
+            *interest *= 0.99 * self.decay_factor;
         }
 
         for weight in self.preferred_creators.values_mut() {
-            *weight *= 0.99;
+            *weight *= 0.99 * self.decay_factor;
         }
     }
 }

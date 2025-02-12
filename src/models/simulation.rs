@@ -1,9 +1,11 @@
 use crate::{models::AgentType, RecommendationEngine};
+use nalgebra::DVector;
+use std::time::{Duration, Instant};
 
-use super::{Agent, Bot, Individual, Organisation};
+use super::{Agent, Bot, Content, Individual, Organisation};
 
 #[derive(Debug, Clone)]
-pub struct SimulationConfig<'a> {
+pub struct SimulationConfig {
     pub num_individuals: usize,
     pub num_bots: usize,
     pub num_organisations: usize,
@@ -11,8 +13,14 @@ pub struct SimulationConfig<'a> {
     pub creator_preference_increment: f32,
     pub long_content_interest_multiplier: f32,
     pub bot_creation_ticks: i32,
-    pub sample_tags: Vec<&'a str>,
+    pub sample_tags: Vec<String>,
     pub starting_tags: StartingTags,
+    pub base_content_length: i32,
+    pub starting_content: Vec<Content>,
+    pub diversity_weight: f32,
+    pub recency_weight: f32,
+    pub engagement_weight: f32,
+    pub tick_rate_ms: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -22,7 +30,7 @@ pub struct StartingTags {
     pub organisation: usize,
 }
 
-impl<'a> Default for SimulationConfig<'a> {
+impl Default for SimulationConfig {
     fn default() -> Self {
         SimulationConfig {
             num_individuals: 1,
@@ -33,35 +41,50 @@ impl<'a> Default for SimulationConfig<'a> {
             long_content_interest_multiplier: 1.5,
             bot_creation_ticks: 2,
             sample_tags: vec![
-                "politics",
-                "technology",
-                "science",
-                "entertainment",
-                "sports",
-                "health",
-                "education",
-                "business",
+                "politics".to_string(),
+                "technology".to_string(),
+                "science".to_string(),
+                "entertainment".to_string(),
+                "sports".to_string(),
+                "health".to_string(),
+                "education".to_string(),
+                "business".to_string(),
             ],
             starting_tags: StartingTags {
                 individual: 3,
                 bot: 3,
                 organisation: 3,
             },
+            base_content_length: 20,
+            starting_content: vec![Content {
+                id: 99999,
+                creator_id: 99999,
+                timestamp: chrono::Utc::now().timestamp(),
+                tags: vec!["initial".to_string()],
+                engagement_score: 0.0,
+                vector_representation: DVector::zeros(100),
+                length: 10,
+            }],
+            diversity_weight: 0.2,
+            recency_weight: 0.2,
+            engagement_weight: 0.2,
+            tick_rate_ms: 2_000,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Simulation<'a> {
-    pub config: SimulationConfig<'a>,
+pub struct Simulation {
+    pub config: SimulationConfig,
     pub engine: RecommendationEngine,
     pub agents: Vec<Box<dyn Agent>>,
-    pub current_tick: i64,
+    pub current_tick: Instant,
+    pub last_tick: Instant,
 }
 
-impl<'a> Simulation<'a> {
-    pub fn new(config: SimulationConfig<'a>) -> Self {
-        let mut engine = RecommendationEngine::new();
+impl Simulation {
+    pub fn new(config: SimulationConfig) -> Self {
+        let mut engine = RecommendationEngine::new(&config);
         let mut agents: Vec<Box<dyn Agent>> = Vec::new();
         let mut id_counter = 0;
 
@@ -103,40 +126,32 @@ impl<'a> Simulation<'a> {
             config,
             engine,
             agents,
-            current_tick: 0,
+            current_tick: Instant::now(),
+            last_tick: Instant::now(),
         }
     }
 
     pub fn tick(&mut self) {
-        self.current_tick += 1;
-        // let current_time = chrono::Utc::now().timestamp();
+        self.current_tick = Instant::now();
+        let elapsed = self.current_tick.duration_since(self.last_tick);
 
-        let mut new_content = Vec::new();
+        if elapsed >= Duration::from_millis(self.config.tick_rate_ms as u64) {
+            self.last_tick = self.current_tick;
 
-        for agent in self.agents.iter_mut() {
-            let content = agent.tick(&self.engine, &self.config);
-            match content {
-                Some(content) => new_content.push(content),
-                _ => (),
+            let mut new_content = Vec::new();
+
+            for agent in self.agents.iter_mut() {
+                if let Some(content) = agent.tick(&self.engine, &self.config) {
+                    new_content.push(content);
+                }
             }
-        }
 
-        self.engine.content_pool.extend(new_content);
-    }
-
-    pub fn run(&mut self, num_ticks: i64) {
-        for _ in 0..num_ticks {
-            self.tick();
-
-            // Print statistics every 10 ticks
-            if self.current_tick % 10 == 0 {
-                self.print_statistics();
-            }
+            self.engine.content_pool.extend(new_content);
         }
     }
 
     pub fn print_statistics(&self) {
-        println!("\nTick {}", self.current_tick);
+        println!("\nTick {:?}", self.current_tick);
         println!("Content pool size: {}", self.engine.content_pool.len());
 
         // Print some engagement statistics
@@ -171,7 +186,10 @@ impl<'a> Simulation<'a> {
                     println!("\nIndividual State:");
                     println!("\nActivity: {:?}", agent.activity());
                     println!("Interests: {:?}", agent.interests());
-                    println!("Preferred creators: {:?}", agent.preferred_creators());
+                    println!(
+                        "Preferred creators: {:?}",
+                        agent.preferred_creators().unwrap()
+                    );
                 } // AgentType::Organisation => {
                 //     println!("\nOrganisation State:");
                 //     println!("Interests: {:?}", agent.interests());

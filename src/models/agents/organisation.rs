@@ -45,6 +45,10 @@ impl Agent for Organisation {
     fn activity(&self) -> &Activity {
         &self.core.activity
     }
+
+    fn id(&self) -> &usize {
+        &self.core.id
+    }
 }
 
 impl Organisation {
@@ -55,7 +59,7 @@ impl Organisation {
 
         // Randomly sample from initial tags
         // TODO: Randomly sample multiple tags
-        let tag = config.sample_tags[rand::thread_rng().gen_range(0..config.sample_tags.len())];
+        let tag = &config.sample_tags[rand::thread_rng().gen_range(0..config.sample_tags.len())];
 
         // Add tag to interests
         interests.insert(tag.to_string(), 0.9);

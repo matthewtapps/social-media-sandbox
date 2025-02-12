@@ -1,5 +1,6 @@
 use crate::models::Content;
 use crate::models::Individual;
+use crate::models::SimulationConfig;
 use nalgebra::DVector;
 use std::collections::HashMap;
 
@@ -15,11 +16,11 @@ pub struct RecommendationEngine {
 }
 
 impl RecommendationEngine {
-    pub fn new() -> Self {
+    pub fn new(config: &SimulationConfig) -> Self {
         RecommendationEngine {
             tag_to_index: HashMap::new(),
             index_to_tag: HashMap::new(),
-            content_pool: Vec::new(),
+            content_pool: config.starting_content.clone(),
             vector_dimension: 100,
             diversity_weight: 0.2,
             recency_weight: 0.3,
@@ -64,6 +65,7 @@ impl RecommendationEngine {
     }
 
     pub fn calculate_diversity_score(&self, content: &Content, agent: &Individual) -> f32 {
+        // If no view history, assume maximum diversity
         if agent.viewed_content.is_empty() {
             return 1.0;
         }
@@ -75,17 +77,22 @@ impl RecommendationEngine {
             .filter_map(|&id| self.content_pool.iter().find(|c| c.id == id))
             .collect();
 
-        let avg_similarity: f32 = recent_views
+        if recent_views.is_empty() {
+            return 1.0;
+        }
+
+        let total_similarity: f32 = recent_views
             .iter()
             .map(|&viewed| {
-                content
+                let similarity = content
                     .vector_representation
-                    .dot(&viewed.vector_representation)
+                    .dot(&viewed.vector_representation);
+                similarity.max(0.0).min(1.0)
             })
-            .sum::<f32>()
-            / recent_views.len() as f32;
+            .sum::<f32>();
 
-        // Return inverse of similarity to promote diversity
+        let avg_similarity = total_similarity / recent_views.len() as f32;
+
         1.0 - avg_similarity
     }
 
@@ -105,10 +112,8 @@ impl RecommendationEngine {
             })
             .collect();
 
-        // Sort by score in descending order
         scored_content.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-        // Return top N recommendations
         scored_content
             .into_iter()
             .take(count)
@@ -126,7 +131,6 @@ impl RecommendationEngine {
             *current_interest += agent.bias_factor * (weight - *current_interest);
         }
 
-        // Update interest vector
         agent.core.interest_vector =
             self.vectorize_tags(&agent.core.interests.keys().cloned().collect::<Vec<_>>());
     }

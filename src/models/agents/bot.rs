@@ -45,6 +45,10 @@ impl Agent for Bot {
     fn activity(&self) -> &Activity {
         &self.core.activity
     }
+
+    fn id(&self) -> &usize {
+        &self.core.id
+    }
 }
 
 impl Bot {
@@ -54,7 +58,8 @@ impl Bot {
         let mut interests = HashMap::new();
 
         for _ in 0..config.starting_tags.bot {
-            let tag = config.sample_tags[rand::thread_rng().gen_range(0..config.sample_tags.len())];
+            let tag =
+                &config.sample_tags[rand::thread_rng().gen_range(0..config.sample_tags.len())];
             interests.insert(tag.to_string(), 1.0);
         }
 

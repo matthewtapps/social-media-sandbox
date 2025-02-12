@@ -21,6 +21,8 @@ pub trait Agent: Debug + Any {
     }
 
     fn activity(&self) -> &Activity;
+
+    fn id(&self) -> &usize;
 }
 
 impl Clone for Box<dyn Agent> {
