@@ -1,5 +1,5 @@
 use eframe::egui;
-use egui::Vec2;
+use egui::{Vec2, Widget};
 use social_media_sandbox::{
     models::{Activity, AgentType, SimulationConfig},
     Simulation,
@@ -118,23 +118,28 @@ impl SimulationApp {
 
             ui.add(
                 egui::Slider::new(&mut self.simulation.config.diversity_weight, 0.0..=1.0)
-                    .text("Diversity Weight"),
+                    .text("Diversity Weight")
+                    .step_by(0.01),
             );
             ui.add(
                 egui::Slider::new(&mut self.simulation.config.recency_weight, 0.0..=1.0)
-                    .text("Recency Weight"),
+                    .text("Recency Weight")
+                    .step_by(0.01),
             );
             ui.add(
                 egui::Slider::new(&mut self.simulation.config.engagement_weight, 0.0..=1.0)
-                    .text("Engagement Weight"),
+                    .text("Engagement Weight")
+                    .step_by(0.01),
             );
             ui.add(
                 egui::Slider::new(&mut self.simulation.config.interest_decay_rate, 0.0..=1.0)
-                    .text("Interest Decay Rate"),
+                    .text("Interest Decay Rate")
+                    .step_by(0.001),
             );
             ui.add(
                 egui::Slider::new(&mut self.simulation.config.tick_rate_ms, 0..=10_000)
-                    .text("Tick Rate (ms)"),
+                    .text("Tick Rate (ms)")
+                    .step_by(10.0),
             );
 
             if ui.button("Reset Simulation").clicked() {
@@ -210,16 +215,20 @@ impl SimulationApp {
                     .show(ctx, |ui| {
                         ui.label(format!("Type: {:?}", agent.get_type()));
                         ui.separator();
-                        ui.label("Interests:");
-                        for (interest, weight) in agent.interests() {
-                            ui.label(format!(
-                                "{:?}: {}%",
-                                String::from(interest),
-                                *weight as f32 / 1.0
-                            ));
-                        }
+                        egui::Frame::new().show(ui, |ui| {
+                            ui.heading("Interests");
+                            ui.set_height(200.0);
+                            draw_spider_chart(
+                                ui,
+                                &agent
+                                    .interests()
+                                    .iter()
+                                    .map(|(k, v)| (k.clone(), *v))
+                                    .collect::<Vec<_>>(),
+                            );
+                        });
                         ui.separator();
-                        ui.label("Activity:");
+                        ui.heading("Activity");
                         ui.label(match &agent.activity() {
                             Activity::Creating(state) => format!(
                                 "Creating ({}%)",
@@ -462,4 +471,79 @@ fn draw_person_icon(ui: &mut egui::Ui) -> egui::Response {
     );
 
     response
+}
+
+fn draw_spider_chart(ui: &mut egui::Ui, interests: &[(String, f32)]) {
+    let painter = ui.painter();
+    let rect = ui.available_rect_before_wrap();
+    let center = rect.center();
+    let radius = rect.height().min(rect.width()) * 0.4;
+
+    let n_points = interests.len();
+    if n_points == 0 {
+        return;
+    }
+
+    // Draw circular guides
+    for i in 1..=5 {
+        let points: Vec<egui::Pos2> = (0..n_points)
+            .map(|p| {
+                let angle = (p as f32 * 2.0 * std::f32::consts::PI / n_points as f32)
+                    - std::f32::consts::PI / 2.0;
+                let r = radius * (i as f32 / 5.0);
+                egui::pos2(center.x + r * angle.cos(), center.y + r * angle.sin())
+            })
+            .collect();
+        painter.add(egui::Shape::closed_line(
+            points,
+            egui::Stroke::new(1.0, egui::Color32::GRAY),
+        ));
+    }
+
+    // Draw spokes
+    for i in 0..n_points {
+        let angle =
+            (i as f32 * 2.0 * std::f32::consts::PI / n_points as f32) - std::f32::consts::PI / 2.0;
+        painter.line_segment(
+            [
+                center,
+                egui::pos2(
+                    center.x + radius * angle.cos(),
+                    center.y + radius * angle.sin(),
+                ),
+            ],
+            egui::Stroke::new(1.0, egui::Color32::GRAY),
+        );
+
+        // Draw labels
+        let label_pos = egui::pos2(
+            center.x + radius * 1.1 * angle.cos(),
+            center.y + radius * 1.1 * angle.sin(),
+        );
+        painter.text(
+            label_pos,
+            egui::Align2::CENTER_CENTER,
+            &interests[i].0,
+            egui::FontId::proportional(14.0),
+            egui::Color32::WHITE,
+        );
+    }
+
+    // Draw interest values
+    let points: Vec<egui::Pos2> = interests
+        .iter()
+        .enumerate()
+        .map(|(i, (_, value))| {
+            let angle = (i as f32 * 2.0 * std::f32::consts::PI / n_points as f32)
+                - std::f32::consts::PI / 2.0;
+            let r = radius * value;
+            egui::pos2(center.x + r * angle.cos(), center.y + r * angle.sin())
+        })
+        .collect();
+
+    painter.add(egui::Shape::convex_polygon(
+        points.clone(),
+        egui::Color32::from_rgba_premultiplied(100, 100, 255, 100),
+        egui::Stroke::new(2.0, egui::Color32::BLUE),
+    ));
 }

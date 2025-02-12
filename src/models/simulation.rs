@@ -1,8 +1,7 @@
 use crate::{models::AgentType, RecommendationEngine};
-use nalgebra::DVector;
-use std::time::{Duration, Instant};
+use chrono::{DateTime, Utc};
 
-use super::{Agent, Bot, Content, Individual, Organisation};
+use super::{Agent, Bot, Individual, Organisation};
 
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
@@ -10,13 +9,10 @@ pub struct SimulationConfig {
     pub num_bots: usize,
     pub num_organisations: usize,
     pub max_content_length: i32,
-    pub creator_preference_increment: f32,
-    pub long_content_interest_multiplier: f32,
     pub bot_creation_ticks: i32,
     pub sample_tags: Vec<String>,
     pub starting_tags: StartingTags,
     pub base_content_length: i32,
-    pub starting_content: Vec<Content>,
     pub diversity_weight: f32,
     pub recency_weight: f32,
     pub engagement_weight: f32,
@@ -34,12 +30,10 @@ pub struct StartingTags {
 impl Default for SimulationConfig {
     fn default() -> Self {
         SimulationConfig {
-            num_individuals: 1,
-            num_bots: 5,
-            num_organisations: 5,
+            num_individuals: 3,
+            num_bots: 2,
+            num_organisations: 2,
             max_content_length: 60,
-            creator_preference_increment: 0.1,
-            long_content_interest_multiplier: 1.5,
             bot_creation_ticks: 4,
             sample_tags: vec![
                 "politics".to_string(),
@@ -57,19 +51,10 @@ impl Default for SimulationConfig {
                 organisation: 3,
             },
             base_content_length: 20,
-            starting_content: vec![Content {
-                id: 99999,
-                creator_id: 99999,
-                timestamp: chrono::Utc::now().timestamp(),
-                tags: vec!["initial".to_string()],
-                engagement_score: 0.0,
-                vector_representation: DVector::zeros(100),
-                length: 10,
-            }],
             diversity_weight: 0.2,
             recency_weight: 0.2,
             engagement_weight: 0.2,
-            tick_rate_ms: 2_000,
+            tick_rate_ms: 100,
             interest_decay_rate: 0.001,
         }
     }
@@ -80,13 +65,13 @@ pub struct Simulation {
     pub config: SimulationConfig,
     pub engine: RecommendationEngine,
     pub agents: Vec<Box<dyn Agent>>,
-    pub current_tick: Instant,
-    pub last_tick: Instant,
+    pub current_tick: DateTime<Utc>,
+    pub last_tick: DateTime<Utc>,
 }
 
 impl Simulation {
     pub fn new(config: SimulationConfig) -> Self {
-        let mut engine = RecommendationEngine::new(&config);
+        let mut engine = RecommendationEngine::new();
         let mut agents: Vec<Box<dyn Agent>> = Vec::new();
         let mut id_counter = 0;
 
@@ -124,20 +109,22 @@ impl Simulation {
             id_counter += 1;
         }
 
+        let now = Utc::now();
+
         Simulation {
             config,
             engine,
             agents,
-            current_tick: Instant::now(),
-            last_tick: Instant::now(),
+            current_tick: now,
+            last_tick: now,
         }
     }
 
     pub fn tick(&mut self) {
-        self.current_tick = Instant::now();
-        let elapsed = self.current_tick.duration_since(self.last_tick);
+        self.current_tick = Utc::now();
+        let elapsed = (self.current_tick - self.last_tick).num_milliseconds();
 
-        if elapsed >= Duration::from_millis(self.config.tick_rate_ms as u64) {
+        if elapsed >= self.config.tick_rate_ms as i64 {
             self.last_tick = self.current_tick;
 
             let mut new_content = Vec::new();
