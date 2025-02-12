@@ -1,20 +1,21 @@
 use eframe::egui;
 use egui::Vec2;
 use social_media_sandbox::{
-    models::{Activity, SimulationConfig},
+    models::{Activity, AgentType, SimulationConfig},
     Simulation,
 };
 pub struct SimulationApp {
     running: bool,
     simulation: Simulation,
+    open_agent_windows: Vec<usize>, // Track multiple open windows
 }
 
 impl Default for SimulationApp {
     fn default() -> Self {
-        let default_config = SimulationConfig::default();
         Self {
             running: false,
-            simulation: Simulation::new(default_config),
+            simulation: Simulation::new(SimulationConfig::default()),
+            open_agent_windows: Vec::new(),
         }
     }
 }
@@ -90,38 +91,84 @@ impl SimulationApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Agents");
+
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for agent in &self.simulation.agents {
-                        ui.allocate_ui(Vec2 { x: 150.0, y: 150.0 }, |ui| {
-                            ui.group(|ui| {
-                                ui.label(format!("Agent {:?}", agent.id()));
-                                ui.label(format!("Type: {:?}", agent.get_type()));
-                                for (interest, weight) in agent.interests() {
-                                    ui.label(format!(
-                                        "{:?} {}%",
-                                        String::from(interest),
-                                        *weight as f32 / 1.0
-                                    ));
+                        let agent_id = *agent.id();
+                        let response = ui.allocate_ui(Vec2 { x: 80.0, y: 100.0 }, |ui| {
+                            ui.vertical_centered_justified(|ui| {
+                                match agent.get_type() {
+                                    AgentType::Bot => draw_bot_icon(ui),
+                                    AgentType::Organisation => draw_org_icon(ui),
+                                    AgentType::Individual => draw_person_icon(ui),
+                                };
+
+                                // Progress bar area (remaining height)
+                                match &agent.activity() {
+                                    Activity::Creating(state) => {
+                                        let progress =
+                                            state.ticks_spent as f32 / state.ticks_required as f32;
+                                        ui.add(egui::ProgressBar::new(progress).text("Creating"));
+                                    }
+                                    Activity::Consuming(state) => {
+                                        let progress =
+                                            state.ticks_spent as f32 / state.ticks_required as f32;
+                                        ui.add(egui::ProgressBar::new(progress).text("Consuming"));
+                                    }
+                                    Activity::Offline => {
+                                        ui.add(egui::ProgressBar::new(0.0).text("Offline"));
+                                    }
                                 }
-                                ui.label(match &agent.activity() {
-                                    Activity::Creating(state) => format!(
-                                        "Creating ({}%)",
-                                        (state.ticks_spent as f32 / state.ticks_required as f32
-                                            * 100.0) as i32
-                                    ),
-                                    Activity::Consuming(state) => format!(
-                                        "Consuming ({}%)",
-                                        (state.ticks_spent as f32 / state.ticks_required as f32
-                                            * 100.0) as i32
-                                    ),
-                                    Activity::Offline => "Offline".to_string(),
-                                });
                             });
                         });
+
+                        if response.response.clicked()
+                            && !self.open_agent_windows.contains(&agent_id)
+                        {
+                            self.open_agent_windows.push(agent_id);
+                        }
                     }
-                })
-            })
+                });
+            });
+        });
+
+        self.open_agent_windows.retain(|&agent_id| {
+            if let Some(agent) = self.simulation.agents.iter().find(|a| *a.id() == agent_id) {
+                let mut window_open = true;
+                egui::Window::new(format!("Agent {}", agent_id))
+                    .open(&mut window_open)
+                    .show(ctx, |ui| {
+                        ui.label(format!("Type: {:?}", agent.get_type()));
+                        ui.separator();
+                        ui.label("Interests:");
+                        for (interest, weight) in agent.interests() {
+                            ui.label(format!(
+                                "{:?}: {}%",
+                                String::from(interest),
+                                *weight as f32 / 1.0
+                            ));
+                        }
+                        ui.separator();
+                        ui.label("Activity:");
+                        ui.label(match &agent.activity() {
+                            Activity::Creating(state) => format!(
+                                "Creating ({}%)",
+                                (state.ticks_spent as f32 / state.ticks_required as f32 * 100.0)
+                                    as i32
+                            ),
+                            Activity::Consuming(state) => format!(
+                                "Consuming ({}%)",
+                                (state.ticks_spent as f32 / state.ticks_required as f32 * 100.0)
+                                    as i32
+                            ),
+                            Activity::Offline => "Offline".to_string(),
+                        });
+                    });
+                window_open
+            } else {
+                false
+            }
         });
 
         egui::TopBottomPanel::bottom("Content Pool").show(ctx, |ui| {
@@ -203,4 +250,116 @@ fn main() {
             }
         }
     });
+}
+
+fn draw_bot_icon(ui: &mut egui::Ui) {
+    let painter = ui.painter();
+    let rect = ui.available_rect_before_wrap();
+    let center = rect.center();
+    let size = rect.height().min(rect.width()) * 0.8;
+
+    // Head
+    painter.circle_filled(center, size / 2.0, egui::Color32::GRAY);
+
+    // Antenna
+    painter.line_segment(
+        [
+            center + Vec2::new(-size / 4.0, -size / 2.0),
+            center + Vec2::new(-size / 4.0, -size / 1.5),
+        ],
+        egui::Stroke::new(2.0, egui::Color32::DARK_GRAY),
+    );
+    painter.circle_filled(
+        center + Vec2::new(-size / 4.0, -size / 1.5),
+        size / 10.0,
+        egui::Color32::DARK_GRAY,
+    );
+
+    // Eyes
+    painter.circle_filled(
+        center + Vec2::new(-size / 4.0, -size / 6.0),
+        size / 8.0,
+        egui::Color32::LIGHT_BLUE,
+    );
+    painter.circle_filled(
+        center + Vec2::new(size / 4.0, -size / 6.0),
+        size / 8.0,
+        egui::Color32::LIGHT_BLUE,
+    );
+}
+
+fn draw_org_icon(ui: &mut egui::Ui) {
+    let painter = ui.painter();
+    let rect = ui.available_rect_before_wrap();
+    let center = rect.center();
+    let size = rect.height().min(rect.width()) * 0.8;
+
+    // Building base
+    painter.rect_filled(
+        egui::Rect::from_center_size(center, Vec2::new(size, size)),
+        0.0,
+        egui::Color32::GRAY,
+    );
+
+    // Windows
+    for x in [-size / 4.0, size / 4.0] {
+        for y in [-size / 4.0, size / 4.0] {
+            painter.rect_filled(
+                egui::Rect::from_center_size(
+                    center + Vec2::new(x, y),
+                    Vec2::new(size / 4.0, size / 4.0),
+                ),
+                0.0,
+                egui::Color32::LIGHT_BLUE,
+            );
+        }
+    }
+}
+
+fn draw_person_icon(ui: &mut egui::Ui) {
+    let painter = ui.painter();
+    let rect = ui.available_rect_before_wrap();
+    let center = rect.center();
+    let size = rect.height().min(rect.width()) * 0.8;
+
+    // Head
+    painter.circle_filled(
+        center + Vec2::new(0.0, -size / 3.0),
+        size / 4.0,
+        egui::Color32::GRAY,
+    );
+
+    // Body
+    painter.line_segment(
+        [
+            center + Vec2::new(0.0, -size / 6.0),
+            center + Vec2::new(0.0, size / 3.0),
+        ],
+        egui::Stroke::new(2.0, egui::Color32::GRAY),
+    );
+
+    // Arms
+    painter.line_segment(
+        [
+            center + Vec2::new(-size / 3.0, 0.0),
+            center + Vec2::new(size / 3.0, 0.0),
+        ],
+        egui::Stroke::new(2.0, egui::Color32::GRAY),
+    );
+
+    // Legs
+    painter.line_segment(
+        [
+            center + Vec2::new(0.0, size / 3.0),
+            center + Vec2::new(-size / 4.0, size / 2.0),
+        ],
+        egui::Stroke::new(2.0, egui::Color32::GRAY),
+    );
+    painter.line_segment(
+        [
+            center + Vec2::new(0.0, size / 3.0),
+            center + Vec2::new(size / 4.0, size / 2.0),
+        ],
+        egui::Stroke::new(2.0, egui::Color32::GRAY),
+    );
 }
