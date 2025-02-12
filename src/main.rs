@@ -51,9 +51,8 @@ impl SimulationApp {
                 .count();
             if ui
                 .add(
-                    egui::DragValue::new(&mut self.simulation.config.num_individuals)
-                        .range(0..=100)
-                        .suffix(" individuals"),
+                    egui::Slider::new(&mut self.simulation.config.num_individuals, 0..=100)
+                        .text("Num. Individuals"),
                 )
                 .changed()
             {
@@ -72,9 +71,8 @@ impl SimulationApp {
                 .count();
             if ui
                 .add(
-                    egui::DragValue::new(&mut self.simulation.config.num_bots)
-                        .range(0..=100)
-                        .suffix(" bots"),
+                    egui::Slider::new(&mut self.simulation.config.num_bots, 0..=100)
+                        .text("Num. Bots"),
                 )
                 .changed()
             {
@@ -93,9 +91,8 @@ impl SimulationApp {
                 .count();
             if ui
                 .add(
-                    egui::DragValue::new(&mut self.simulation.config.num_organisations)
-                        .range(0..=100)
-                        .suffix(" organisations"),
+                    egui::Slider::new(&mut self.simulation.config.num_organisations, 0..=100)
+                        .text("Num. Organisations"),
                 )
                 .changed()
             {
@@ -132,9 +129,19 @@ impl SimulationApp {
                     .text("Engagement Weight"),
             );
             ui.add(
+                egui::Slider::new(&mut self.simulation.config.interest_decay_rate, 0.0..=1.0)
+                    .text("Interest Decay Rate"),
+            );
+            ui.add(
                 egui::Slider::new(&mut self.simulation.config.tick_rate_ms, 0..=10_000)
                     .text("Tick Rate (ms)"),
             );
+
+            if ui.button("Reset Simulation").clicked() {
+                self.simulation = Simulation::new(SimulationConfig::default());
+
+                self.open_agent_windows.clear(); // Clear any open windows
+            }
         });
 
         egui::TopBottomPanel::top("Agents").show(ctx, |ui| {

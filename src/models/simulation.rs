@@ -21,6 +21,7 @@ pub struct SimulationConfig {
     pub recency_weight: f32,
     pub engagement_weight: f32,
     pub tick_rate_ms: i32,
+    pub interest_decay_rate: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +70,7 @@ impl Default for SimulationConfig {
             recency_weight: 0.2,
             engagement_weight: 0.2,
             tick_rate_ms: 2_000,
+            interest_decay_rate: 0.001,
         }
     }
 }

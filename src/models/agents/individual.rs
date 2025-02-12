@@ -22,7 +22,7 @@ impl Agent for Individual {
         engine: &RecommendationEngine,
         config: &SimulationConfig,
     ) -> Option<Content> {
-        self.decay_preferences();
+        self.decay_interests(config);
 
         match self.core.activity {
             Activity::Offline => {
@@ -176,13 +176,13 @@ impl Individual {
         *weight += 0.05 * self.bias_factor * ticks_spent as f32;
     }
 
-    fn decay_preferences(&mut self) {
+    fn decay_interests(&mut self, config: &SimulationConfig) {
         for interest in self.core.interests.values_mut() {
             *interest *= 0.99 * self.decay_factor;
         }
 
         for weight in self.preferred_creators.values_mut() {
-            *weight *= 0.99 * self.decay_factor;
+            *weight *= (1.0 - config.interest_decay_rate) * self.decay_factor;
         }
     }
 }
