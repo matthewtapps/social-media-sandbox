@@ -39,7 +39,7 @@ impl Default for SimulationConfig {
             max_content_length: 60,
             creator_preference_increment: 0.1,
             long_content_interest_multiplier: 1.5,
-            bot_creation_ticks: 2,
+            bot_creation_ticks: 4,
             sample_tags: vec![
                 "politics".to_string(),
                 "technology".to_string(),
@@ -147,6 +147,26 @@ impl Simulation {
             }
 
             self.engine.content_pool.extend(new_content);
+        }
+    }
+
+    pub fn add_agent(&mut self, agent_type: AgentType) {
+        let id = self.agents.len();
+        let new_agent: Box<dyn Agent> = match agent_type {
+            AgentType::Individual => Box::new(Individual::new(id, &self.config, &self.engine)),
+            AgentType::Bot => Box::new(Bot::new(id, &self.config, &self.engine)),
+            AgentType::Organisation => Box::new(Organisation::new(id, &self.config, &self.engine)),
+        };
+        self.agents.push(new_agent);
+    }
+
+    pub fn remove_agent(&mut self, agent_type: AgentType) {
+        if let Some(pos) = self
+            .agents
+            .iter()
+            .rposition(|agent| agent.get_type() == agent_type)
+        {
+            self.agents.remove(pos);
         }
     }
 

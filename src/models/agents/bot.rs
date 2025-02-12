@@ -20,7 +20,7 @@ impl Agent for Bot {
                 creation_state.ticks_spent += 1;
                 if creation_state.ticks_spent >= creation_state.ticks_required {
                     let content = self.core.generate_content(engine, config);
-                    self.core.activity = self.new_creation();
+                    self.core.activity = self.new_creation(config);
                     return Some(content);
                 } else {
                     None
@@ -83,8 +83,8 @@ impl Bot {
         }
     }
 
-    fn new_creation(&self) -> Activity {
-        let ticks_required = 1;
+    fn new_creation(&self, config: &SimulationConfig) -> Activity {
+        let ticks_required = config.bot_creation_ticks;
         return Activity::Creating(ContentCreationState {
             content_id: rand::thread_rng().next_u32() as usize,
             ticks_spent: 0,

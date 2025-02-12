@@ -43,21 +43,69 @@ impl SimulationApp {
                 self.running = !self.running;
             }
 
-            ui.add(
-                egui::DragValue::new(&mut self.simulation.config.num_individuals)
-                    .range(0..=100)
-                    .suffix(" individuals"),
-            );
-            ui.add(
-                egui::DragValue::new(&mut self.simulation.config.num_bots)
-                    .range(0..=100)
-                    .suffix(" bots"),
-            );
-            ui.add(
-                egui::DragValue::new(&mut self.simulation.config.num_organisations)
-                    .range(0..=100)
-                    .suffix(" organisations"),
-            );
+            let current_individuals = self
+                .simulation
+                .agents
+                .iter()
+                .filter(|a| matches!(a.get_type(), AgentType::Individual))
+                .count();
+            if ui
+                .add(
+                    egui::DragValue::new(&mut self.simulation.config.num_individuals)
+                        .range(0..=100)
+                        .suffix(" individuals"),
+                )
+                .changed()
+            {
+                self.handle_agent_count_change(
+                    self.simulation.config.num_individuals,
+                    current_individuals,
+                    AgentType::Individual,
+                );
+            }
+
+            let current_bots = self
+                .simulation
+                .agents
+                .iter()
+                .filter(|a| matches!(a.get_type(), AgentType::Bot))
+                .count();
+            if ui
+                .add(
+                    egui::DragValue::new(&mut self.simulation.config.num_bots)
+                        .range(0..=100)
+                        .suffix(" bots"),
+                )
+                .changed()
+            {
+                self.handle_agent_count_change(
+                    self.simulation.config.num_bots,
+                    current_bots,
+                    AgentType::Bot,
+                );
+            }
+
+            let current_orgs = self
+                .simulation
+                .agents
+                .iter()
+                .filter(|a| matches!(a.get_type(), AgentType::Organisation))
+                .count();
+            if ui
+                .add(
+                    egui::DragValue::new(&mut self.simulation.config.num_organisations)
+                        .range(0..=100)
+                        .suffix(" organisations"),
+                )
+                .changed()
+            {
+                self.handle_agent_count_change(
+                    self.simulation.config.num_organisations,
+                    current_orgs,
+                    AgentType::Organisation,
+                );
+            }
+
             ui.add(
                 egui::Slider::new(&mut self.simulation.config.base_content_length, 0..=100)
                     .text("Base content length"),
@@ -89,45 +137,59 @@ impl SimulationApp {
             );
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Agents");
-
+        egui::TopBottomPanel::top("Agents").show(ctx, |ui| {
+            ui.set_min_height(ctx.available_rect().height() / 2.0);
+            ui.set_max_height(ctx.available_rect().height() / 2.0);
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for agent in &self.simulation.agents {
                         let agent_id = *agent.id();
-                        let response = ui.allocate_ui(Vec2 { x: 80.0, y: 100.0 }, |ui| {
-                            ui.vertical_centered_justified(|ui| {
-                                match agent.get_type() {
-                                    AgentType::Bot => draw_bot_icon(ui),
-                                    AgentType::Organisation => draw_org_icon(ui),
-                                    AgentType::Individual => draw_person_icon(ui),
-                                };
+                        ui.allocate_ui(Vec2 { x: 150.0, y: 180.0 }, |ui| {
+                            ui.vertical(|ui| {
+                                ui.add_space(10.0);
+                                // Top section for icon
+                                ui.vertical_centered(|ui| {
+                                    let response = match agent.get_type() {
+                                        AgentType::Bot => draw_bot_icon(ui),
+                                        AgentType::Organisation => draw_org_icon(ui),
+                                        AgentType::Individual => draw_person_icon(ui),
+                                    };
+                                    if response.clicked()
+                                        && !self.open_agent_windows.contains(&agent_id)
+                                    {
+                                        self.open_agent_windows.push(agent_id);
+                                    }
+                                });
 
-                                // Progress bar area (remaining height)
-                                match &agent.activity() {
-                                    Activity::Creating(state) => {
-                                        let progress =
-                                            state.ticks_spent as f32 / state.ticks_required as f32;
-                                        ui.add(egui::ProgressBar::new(progress).text("Creating"));
-                                    }
-                                    Activity::Consuming(state) => {
-                                        let progress =
-                                            state.ticks_spent as f32 / state.ticks_required as f32;
-                                        ui.add(egui::ProgressBar::new(progress).text("Consuming"));
-                                    }
-                                    Activity::Offline => {
-                                        ui.add(egui::ProgressBar::new(0.0).text("Offline"));
-                                    }
-                                }
+                                ui.with_layout(
+                                    egui::Layout::bottom_up(egui::Align::Center),
+                                    |ui| {
+                                        match &agent.activity() {
+                                            Activity::Creating(state) => {
+                                                let progress = state.ticks_spent as f32
+                                                    / state.ticks_required as f32;
+                                                ui.add(
+                                                    egui::ProgressBar::new(progress)
+                                                        .text("Creating"),
+                                                );
+                                            }
+                                            Activity::Consuming(state) => {
+                                                let progress = state.ticks_spent as f32
+                                                    / state.ticks_required as f32;
+                                                ui.add(
+                                                    egui::ProgressBar::new(progress)
+                                                        .text("Consuming"),
+                                                );
+                                            }
+                                            Activity::Offline => {
+                                                ui.add(egui::ProgressBar::new(0.0).text("Offline"));
+                                            }
+                                        }
+                                        ui.add_space(10.0);
+                                    },
+                                );
                             });
                         });
-
-                        if response.response.clicked()
-                            && !self.open_agent_windows.contains(&agent_id)
-                        {
-                            self.open_agent_windows.push(agent_id);
-                        }
                     }
                 });
             });
@@ -173,7 +235,7 @@ impl SimulationApp {
 
         egui::TopBottomPanel::bottom("Content Pool").show(ctx, |ui| {
             ui.heading("Content Pool");
-            ui.set_min_height(ctx.available_rect().height() / 2.0);
+            ui.set_min_height(ctx.available_rect().height());
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for content in &self.simulation.engine.content_pool {
@@ -191,6 +253,27 @@ impl SimulationApp {
                 });
             });
         });
+    }
+
+    fn handle_agent_count_change(
+        &mut self,
+        new_value: usize,
+        current_count: usize,
+        agent_type: AgentType,
+    ) {
+        match new_value.cmp(&current_count) {
+            std::cmp::Ordering::Greater => {
+                for _ in 0..(new_value - current_count) {
+                    self.simulation.add_agent(agent_type);
+                }
+            }
+            std::cmp::Ordering::Less => {
+                for _ in 0..(current_count - new_value) {
+                    self.simulation.remove_agent(agent_type);
+                }
+            }
+            std::cmp::Ordering::Equal => {}
+        }
     }
 }
 
@@ -252,9 +335,11 @@ fn main() {
     });
 }
 
-fn draw_bot_icon(ui: &mut egui::Ui) {
-    let painter = ui.painter();
+fn draw_bot_icon(ui: &mut egui::Ui) -> egui::Response {
     let rect = ui.available_rect_before_wrap();
+    let response = ui.allocate_rect(rect, egui::Sense::click());
+    let painter = ui.painter();
+
     let center = rect.center();
     let size = rect.height().min(rect.width()) * 0.8;
 
@@ -286,22 +371,24 @@ fn draw_bot_icon(ui: &mut egui::Ui) {
         size / 8.0,
         egui::Color32::LIGHT_BLUE,
     );
+
+    response
 }
 
-fn draw_org_icon(ui: &mut egui::Ui) {
-    let painter = ui.painter();
+fn draw_org_icon(ui: &mut egui::Ui) -> egui::Response {
     let rect = ui.available_rect_before_wrap();
+    let response = ui.allocate_rect(rect, egui::Sense::click());
+    let painter = ui.painter();
+
     let center = rect.center();
     let size = rect.height().min(rect.width()) * 0.8;
 
-    // Building base
     painter.rect_filled(
         egui::Rect::from_center_size(center, Vec2::new(size, size)),
         0.0,
         egui::Color32::GRAY,
     );
 
-    // Windows
     for x in [-size / 4.0, size / 4.0] {
         for y in [-size / 4.0, size / 4.0] {
             painter.rect_filled(
@@ -314,11 +401,15 @@ fn draw_org_icon(ui: &mut egui::Ui) {
             );
         }
     }
+
+    response
 }
 
-fn draw_person_icon(ui: &mut egui::Ui) {
-    let painter = ui.painter();
+fn draw_person_icon(ui: &mut egui::Ui) -> egui::Response {
     let rect = ui.available_rect_before_wrap();
+    let response = ui.allocate_rect(rect, egui::Sense::click());
+    let painter = ui.painter();
+
     let center = rect.center();
     let size = rect.height().min(rect.width()) * 0.8;
 
@@ -362,4 +453,6 @@ fn draw_person_icon(ui: &mut egui::Ui) {
         ],
         egui::Stroke::new(2.0, egui::Color32::GRAY),
     );
+
+    response
 }

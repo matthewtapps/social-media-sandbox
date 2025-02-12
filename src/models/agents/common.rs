@@ -31,7 +31,7 @@ impl Clone for Box<dyn Agent> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum AgentType {
     Individual,
     Bot,
