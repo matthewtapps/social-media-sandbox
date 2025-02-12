@@ -1,9 +1,9 @@
-var cacheName = 'egui-template-pwa';
+var cacheName = 'social_media_sandbox';
 var filesToCache = [
   './',
   './index.html',
-  './eframe_template.js',
-  './eframe_template_bg.wasm',
+  './social_media_sandbox.js',
+  './social_media_sandbox.wasm',
 ];
 
 /* Start the service worker and cache all of the app's content */
