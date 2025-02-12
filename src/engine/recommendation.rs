@@ -56,11 +56,18 @@ impl RecommendationEngine {
 
         let diversity_score = self.calculate_diversity_score(content, agent);
 
-        interest_similarity
+        let mut score = interest_similarity
             * (1.0 - self.diversity_weight - self.recency_weight - self.engagement_weight)
             + recency_score * self.recency_weight
             + diversity_score * self.diversity_weight
-            + content.engagement_score * self.engagement_weight
+            + content.engagement_score * self.engagement_weight;
+
+        if let Some(creator_weight) = agent.preferred_creators.get(&content.creator_id) {
+            let creator_boost = creator_weight * 0.3; // Boost recommendations from preferred creators
+            score += creator_boost;
+        }
+
+        score
     }
 
     pub fn calculate_diversity_score(&self, content: &Content, agent: &Individual) -> f32 {

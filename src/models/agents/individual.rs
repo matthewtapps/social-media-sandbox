@@ -14,6 +14,7 @@ pub struct Individual {
     pub bias_factor: f32, // 1 = consumed content has full effect on interests, 0 = interests never change
     pub decay_factor: f32, // 1 = full interest decay speed of 1% per tick, 0 = no decay
     pub consume_speed: f32, // 1 = fastest consume speed, 0 = will never finish
+    pub last_interaction_times: HashMap<String, i64>,
 }
 
 impl Agent for Individual {
@@ -22,8 +23,6 @@ impl Agent for Individual {
         engine: &RecommendationEngine,
         config: &SimulationConfig,
     ) -> Option<Content> {
-        self.decay_interests(config);
-
         match self.core.activity {
             Activity::Offline => {
                 // Use next post likelihood for whether to come back online
@@ -117,6 +116,7 @@ impl Individual {
             bias_factor: random(),
             consume_speed: random(),
             decay_factor: random(),
+            last_interaction_times: HashMap::new(),
         }
     }
 
@@ -125,10 +125,11 @@ impl Individual {
     }
 
     fn create_or_consume(
-        &self,
+        &mut self,
         engine: &RecommendationEngine,
         config: &SimulationConfig,
     ) -> Activity {
+        self.decay_interests(config);
         if self.should_generate_content() {
             let ticks_required = (random::<f32>()
                 * config.base_content_length as f32
@@ -164,10 +165,24 @@ impl Individual {
         ticks_spent: i32,
     ) {
         if let Some(content) = engine.get_content_by_id(content_id) {
+            let now = chrono::Utc::now().timestamp();
+            let experience_factor = 1.0 / (1.0 + self.viewed_content.len() as f32 * 0.1);
+
             for tag in &content.tags {
+                let is_new_interest = !self.core.interests.contains_key(tag);
+                let last_interaction = self.last_interaction_times.get(tag).unwrap_or(&0);
+                let recency_factor = (-0.001 * (now - last_interaction) as f32).exp();
+
                 let interest = self.core.interests.entry(tag.to_string()).or_insert(0.0);
-                *interest += 0.05 * self.bias_factor * ticks_spent as f32;
+                let update_magnitude = if is_new_interest { 0.2 } else { 0.05 };
+
+                *interest += update_magnitude
+                    * self.bias_factor
+                    * experience_factor
+                    * (1.0 + recency_factor);
+                self.last_interaction_times.insert(tag.to_string(), now);
             }
+            self.viewed_content.push(content_id)
         }
     }
 
@@ -178,11 +193,11 @@ impl Individual {
 
     fn decay_interests(&mut self, config: &SimulationConfig) {
         for interest in self.core.interests.values_mut() {
-            *interest *= 0.99 * self.decay_factor;
+            *interest *= (1.0 - config.interest_decay_rate) * (1.0 - self.decay_factor);
         }
 
         for weight in self.preferred_creators.values_mut() {
-            *weight *= (1.0 - config.interest_decay_rate) * self.decay_factor;
+            *weight *= (1.0 - config.interest_decay_rate) * (1.0 - self.decay_factor);
         }
     }
 }

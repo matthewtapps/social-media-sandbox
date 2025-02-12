@@ -1,5 +1,5 @@
 use eframe::egui;
-use egui::{Vec2, Widget};
+use egui::Vec2;
 use social_media_sandbox::{
     models::{Activity, AgentType, SimulationConfig},
     Simulation,

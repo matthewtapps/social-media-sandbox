@@ -55,7 +55,7 @@ impl Default for SimulationConfig {
             recency_weight: 0.2,
             engagement_weight: 0.2,
             tick_rate_ms: 100,
-            interest_decay_rate: 0.001,
+            interest_decay_rate: 0.0,
         }
     }
 }
