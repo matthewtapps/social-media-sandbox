@@ -1,6 +1,5 @@
 use crate::models::Content;
 use crate::models::Individual;
-use crate::models::SimulationConfig;
 use nalgebra::DVector;
 use std::collections::HashMap;
 
@@ -16,11 +15,11 @@ pub struct RecommendationEngine {
 }
 
 impl RecommendationEngine {
-    pub fn new(config: &SimulationConfig) -> Self {
+    pub fn new() -> Self {
         RecommendationEngine {
             tag_to_index: HashMap::new(),
             index_to_tag: HashMap::new(),
-            content_pool: config.starting_content.clone(),
+            content_pool: Vec::new(),
             vector_dimension: 100,
             diversity_weight: 0.2,
             recency_weight: 0.3,
