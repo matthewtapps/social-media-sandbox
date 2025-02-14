@@ -180,9 +180,7 @@ impl SimulationApp {
                                             AgentState::Offline => {
                                                 ui.add(egui::ProgressBar::new(0.0).text("Offline"));
                                             }
-                                            AgentState::Scrolling {
-                                                recommended_post_ids,
-                                            } => {
+                                            AgentState::Scrolling { .. } => {
                                                 ui.add(
                                                     egui::ProgressBar::new(0.0).text("Scrolling"),
                                                 );
@@ -565,20 +563,31 @@ fn draw_spider_chart(ui: &mut egui::Ui, interests: &[(String, f32)]) {
         );
     }
 
+    // Amplifies the spider chart to cover more area when there are more interests
+    let amplification_factor = {
+        let base_factor = 1.0;
+        let bonus = (interests.len() as f32 * 0.1).min(3.0);
+        base_factor + bonus
+    };
+
     // Draw interest values
     let points: Vec<egui::Pos2> = interests
         .iter()
         .enumerate()
         .map(|(i, (_, value))| {
-            let angle = (i as f32 * 2.0 * std::f32::consts::PI / n_points as f32)
+            let angle = (i as f32 * 2.0 * std::f32::consts::PI / interests.len() as f32)
                 - std::f32::consts::PI / 2.0;
-            let r = radius * value;
+
+            let amplified_value = value * amplification_factor;
+            let scaled_value = amplified_value.min(1.0);
+
+            let r = radius * scaled_value;
             egui::pos2(center.x + r * angle.cos(), center.y + r * angle.sin())
         })
         .collect();
 
     painter.add(egui::Shape::convex_polygon(
-        points.clone(),
+        points,
         egui::Color32::from_rgba_premultiplied(100, 100, 255, 100),
         egui::Stroke::new(2.0, egui::Color32::BLUE),
     ));
