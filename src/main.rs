@@ -1,7 +1,7 @@
 use eframe::egui;
 use egui::Vec2;
 use social_media_sandbox::{
-    models::{Activity, AgentType, SimulationConfig},
+    models::{AgentState, AgentType, SimulationConfig},
     Simulation,
 };
 pub struct SimulationApp {
@@ -176,26 +176,42 @@ impl SimulationApp {
                                 ui.with_layout(
                                     egui::Layout::bottom_up(egui::Align::Center),
                                     |ui| {
-                                        match &agent.activity() {
-                                            Activity::Creating(state) => {
-                                                let progress = state.ticks_spent as f32
-                                                    / state.ticks_required as f32;
-                                                ui.add(
-                                                    egui::ProgressBar::new(progress)
-                                                        .text("Creating"),
-                                                );
-                                            }
-                                            Activity::Consuming(state) => {
-                                                let progress = state.ticks_spent as f32
-                                                    / state.ticks_required as f32;
-                                                ui.add(
-                                                    egui::ProgressBar::new(progress)
-                                                        .text("Consuming"),
-                                                );
-                                            }
-                                            Activity::Offline => {
+                                        match agent.state() {
+                                            AgentState::Offline => {
                                                 ui.add(egui::ProgressBar::new(0.0).text("Offline"));
                                             }
+                                            AgentState::Scrolling {
+                                                recommended_post_ids,
+                                            } => {
+                                                ui.add(
+                                                    egui::ProgressBar::new(0.0).text("Scrolling"),
+                                                );
+                                            }
+                                            AgentState::ReadingPost {
+                                                ticks_spent,
+                                                ticks_required,
+                                                ..
+                                            } => {
+                                                let progress =
+                                                    *ticks_spent as f32 / *ticks_required as f32;
+                                                ui.add(
+                                                    egui::ProgressBar::new(progress)
+                                                        .text("Reading Post"),
+                                                );
+                                            }
+                                            AgentState::CreatingPost {
+                                                ticks_spent,
+                                                ticks_required,
+                                                ..
+                                            } => {
+                                                let progress =
+                                                    *ticks_spent as f32 / *ticks_required as f32;
+                                                ui.add(
+                                                    egui::ProgressBar::new(progress)
+                                                        .text("Creating Post"),
+                                                );
+                                            }
+                                            _ => unimplemented!(),
                                         }
                                         ui.add_space(10.0);
                                     },
@@ -221,26 +237,39 @@ impl SimulationApp {
                             draw_spider_chart(
                                 ui,
                                 &agent
-                                    .interests()
+                                    .interest_profile()
+                                    .interests
                                     .iter()
-                                    .map(|(k, v)| (k.clone(), *v))
+                                    .map(|(tag, topic)| (tag.clone(), topic.weighted_interest))
                                     .collect::<Vec<_>>(),
                             );
                         });
                         ui.separator();
                         ui.heading("Activity");
-                        ui.label(match &agent.activity() {
-                            Activity::Creating(state) => format!(
-                                "Creating ({}%)",
-                                (state.ticks_spent as f32 / state.ticks_required as f32 * 100.0)
-                                    as i32
-                            ),
-                            Activity::Consuming(state) => format!(
-                                "Consuming ({}%)",
-                                (state.ticks_spent as f32 / state.ticks_required as f32 * 100.0)
-                                    as i32
-                            ),
-                            Activity::Offline => "Offline".to_string(),
+                        ui.label(match &agent.state() {
+                            AgentState::Offline => "Offline".to_string(),
+                            AgentState::Scrolling { .. } => "Scrolling Feed".to_string(),
+                            AgentState::ReadingPost {
+                                ticks_spent,
+                                ticks_required,
+                                ..
+                            } => {
+                                format!(
+                                    "Reading Post ({}%)",
+                                    (*ticks_spent as f32 / *ticks_required as f32 * 100.0) as i32
+                                )
+                            }
+                            AgentState::CreatingPost {
+                                ticks_spent,
+                                ticks_required,
+                                ..
+                            } => {
+                                format!(
+                                    "Creating Post ({}%)",
+                                    (*ticks_spent as f32 / *ticks_required as f32 * 100.0) as i32
+                                )
+                            }
+                            _ => "".to_string(),
                         });
                     });
                 window_open
@@ -255,13 +284,20 @@ impl SimulationApp {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for content in &self.simulation.engine.content_pool {
+                        let interests: Vec<String> = content
+                            .interest_profile
+                            .interests
+                            .iter()
+                            .map(|(tag, _)| tag.clone())
+                            .collect();
+
                         ui.allocate_ui(Vec2 { x: 150.0, y: 150.0 }, |ui| {
                             ui.group(|ui| {
                                 ui.label(format!("Content {}", content.id));
                                 ui.label(format!("Creator: {}", content.creator_id));
                                 ui.label(format!("Time: {}", content.timestamp));
                                 ui.label(format!("Length: {}", content.length));
-                                ui.label(format!("Tags: {}", content.tags.join(", ")));
+                                ui.label(format!("Tags: {}", interests.join(", ")));
                                 ui.label(format!("Engagement: {:.2}", content.engagement_score));
                             });
                         });

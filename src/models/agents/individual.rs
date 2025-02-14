@@ -1,20 +1,27 @@
 use crate::{models::SimulationConfig, Content, RecommendationEngine};
-use rand::{random, Rng, RngCore};
-use std::collections::HashMap;
+use rand::random;
 
-use super::{Activity, Agent, AgentCore, AgentType, ContentConsumptionState, ContentCreationState};
+use super::{Agent, AgentCore, AgentState, AgentType, InterestProfile};
 
 #[derive(Debug, Clone)]
 pub struct Individual {
     pub core: AgentCore,
-    pub next_post_likelihood: f32, // 1 = will definitely keep scrolling, 0 = will stop scrolling now
-    pub attention_span: f32,       // 1 = will read any length of post, 0 = just reads headlines
-    pub preferred_creators: HashMap<usize, f32>, // The ID of the creator, and a f32 weight
+
+    // 1 = will definitely keep scrolling, 0 = will stop scrolling now
+    pub next_post_likelihood: f32,
+
+    // 1 = will read any length of post, 0 = just reads headlines
+    pub attention_span: f32,
+
+    // 1 = fastest consume speed, 0 = will never finish
+    pub read_speed: f32,
+
+    // List of content IDs representing posts that have been previously
+    // recommended while scrolling
     pub viewed_content: Vec<usize>,
-    pub bias_factor: f32, // 1 = consumed content has full effect on interests, 0 = interests never change
-    pub decay_factor: f32, // 1 = full interest decay speed of 1% per tick, 0 = no decay
-    pub consume_speed: f32, // 1 = fastest consume speed, 0 = will never finish
-    pub last_interaction_times: HashMap<String, i64>,
+
+    // How many ticks the current online session has run for
+    pub session_length_ticks: i32,
 }
 
 impl Agent for Individual {
@@ -23,42 +30,48 @@ impl Agent for Individual {
         engine: &RecommendationEngine,
         config: &SimulationConfig,
     ) -> Option<Content> {
-        match self.core.activity {
-            Activity::Offline => {
-                // Use next post likelihood for whether to come back online
-                if random::<f32>() < self.next_post_likelihood {
-                    self.core.activity = self.create_or_consume(engine, config);
-                }
+        self.session_length_ticks += 1;
+        let (content_option, new_state) = match &self.core.state {
+            AgentState::Offline => (None, self.proceed_from_offline(engine, config)),
+            AgentState::Scrolling {
+                recommended_post_ids,
+            } => (
+                None,
+                self.proceed_from_scrolling(engine, config, recommended_post_ids.clone()),
+            ),
+            AgentState::ReadingPost {
+                post_id,
+                creator_id,
+                ticks_spent,
+                ticks_required,
+            } => (
+                None,
+                self.proceed_from_reading_post(
+                    engine,
+                    config,
+                    *post_id,
+                    *creator_id,
+                    *ticks_spent,
+                    *ticks_required,
+                ),
+            ),
+            AgentState::CreatingPost {
+                post_id,
+                ticks_spent,
+                ticks_required,
+            } => self.proceed_from_creating_post(
+                engine,
+                config,
+                *post_id,
+                *ticks_spent,
+                *ticks_required,
+            ),
+            _ => {
+                unimplemented!()
             }
-
-            Activity::Creating(ref mut creation_state) => {
-                creation_state.ticks_spent += 1;
-                if creation_state.ticks_spent >= creation_state.ticks_required {
-                    let content = self.core.generate_content(engine, config);
-                    self.core.activity = self.create_or_consume(engine, config);
-                    return Some(content);
-                }
-            }
-
-            Activity::Consuming(ref mut consumption_state) => {
-                consumption_state.ticks_spent += 1;
-                if consumption_state.ticks_spent >= consumption_state.ticks_required
-                    || random::<f32>() > self.attention_span
-                {
-                    let content_id = consumption_state.content_id;
-                    let creator_id = consumption_state.creator_id;
-                    let ticks_spent = consumption_state.ticks_spent;
-
-                    self.viewed_content.push(consumption_state.creator_id);
-
-                    self.update_interests(engine, content_id, ticks_spent);
-                    self.update_preferred_creators(creator_id, ticks_spent);
-
-                    self.core.activity = self.create_or_consume(engine, config)
-                }
-            }
-        }
-        None
+        };
+        self.core.state = new_state;
+        content_option
     }
 
     fn clone_box(&self) -> Box<dyn Agent> {
@@ -69,16 +82,12 @@ impl Agent for Individual {
         AgentType::Individual
     }
 
-    fn interests(&self) -> &HashMap<String, f32> {
-        &self.core.interests
+    fn interest_profile(&self) -> &InterestProfile {
+        &self.core.interest_profile
     }
 
-    fn preferred_creators(&self) -> Option<&HashMap<usize, f32>> {
-        Some(&self.preferred_creators)
-    }
-
-    fn activity(&self) -> &Activity {
-        &self.core.activity
+    fn state(&self) -> &AgentState {
+        &self.core.state
     }
 
     fn id(&self) -> &usize {
@@ -87,117 +96,244 @@ impl Agent for Individual {
 }
 
 impl Individual {
-    pub fn new(id: usize, config: &SimulationConfig, engine: &RecommendationEngine) -> Self {
-        let mut interests = HashMap::new();
-
-        for _ in 0..config.starting_tags.bot {
-            let tag =
-                &config.sample_tags[rand::thread_rng().gen_range(0..config.sample_tags.len())];
-            interests.insert(tag.to_string(), 1.0);
-        }
-
-        let agent_tags: Vec<String> = interests.keys().cloned().collect();
-        let interest_vector = engine.vectorize_tags(&agent_tags);
-
+    pub fn new(id: usize, _config: &SimulationConfig, _engine: &RecommendationEngine) -> Self {
         Self {
             core: AgentCore {
                 id,
                 content_creation_frequency: random::<f32>().min(0.3),
                 created_content: Vec::new(),
                 create_speed: random(),
-                activity: Activity::Offline,
-                interests,
-                interest_vector,
+                state: AgentState::Offline,
+                interest_profile: InterestProfile::new(100),
             },
             next_post_likelihood: random(),
             attention_span: random(),
-            preferred_creators: HashMap::new(),
             viewed_content: Vec::new(),
-            bias_factor: random(),
-            consume_speed: random(),
-            decay_factor: random(),
-            last_interaction_times: HashMap::new(),
+            read_speed: random(),
+            session_length_ticks: 0,
         }
     }
 
-    fn should_generate_content(&self) -> bool {
-        return random::<f32>() < self.core.content_creation_frequency;
-    }
-
-    fn create_or_consume(
+    fn proceed_from_offline(
         &mut self,
         engine: &RecommendationEngine,
         config: &SimulationConfig,
-    ) -> Activity {
-        self.decay_interests(config);
-        if self.should_generate_content() {
-            let ticks_required = (random::<f32>()
-                * config.base_content_length as f32
-                * self.core.create_speed) as i32;
-            return Activity::Creating(ContentCreationState {
-                content_id: rand::thread_rng().next_u32() as usize,
-                ticks_spent: 0,
-                ticks_required,
-            });
+    ) -> AgentState {
+        // Uses next post likelihood to determine whether to come online
+        if random::<f32>() < self.next_post_likelihood {
+            self.proceed_to_scrolling(engine, config)
         } else {
-            if let Some(content) = engine
-                .get_recommendations(self, 1, chrono::Utc::now().timestamp())
-                .first()
-            {
-                let ticks_required = (content.length as f32 / self.consume_speed) as i32;
-                return Activity::Consuming(ContentConsumptionState {
-                    content_id: content.id,
-                    creator_id: content.creator_id,
-                    ticks_spent: 0,
-                    ticks_required,
-                });
-            } else {
-                // TODO: No content was found so we go offline?
-                return Activity::Offline;
-            }
+            AgentState::Offline
         }
     }
 
-    fn update_interests(
+    fn proceed_from_scrolling(
         &mut self,
         engine: &RecommendationEngine,
-        content_id: usize,
-        ticks_spent: i32,
-    ) {
-        if let Some(content) = engine.get_content_by_id(content_id) {
-            let now = chrono::Utc::now().timestamp();
-            let experience_factor = 1.0 / (1.0 + self.viewed_content.len() as f32 * 0.1);
+        config: &SimulationConfig,
+        current_recommendations: Vec<usize>,
+    ) -> AgentState {
+        if self.should_go_offline() {
+            return AgentState::Offline;
+        }
 
-            for tag in &content.tags {
-                let is_new_interest = !self.core.interests.contains_key(tag);
-                let last_interaction = self.last_interaction_times.get(tag).unwrap_or(&0);
-                let recency_factor = (-0.001 * (now - last_interaction) as f32).exp();
+        if self.should_select_post() {
+            if let Some(selected_post) =
+                self.select_post_from_recommendations(current_recommendations, engine)
+            {
+                // TODO: Unwrap bad, should proeprly handle when id isn't found
+                let selected_post = engine.get_content_by_id(selected_post).unwrap();
+                // TODO: Comments logic
+                //
+                // if self.should_read_post() {
+                return AgentState::ReadingPost {
+                    post_id: selected_post.id,
+                    creator_id: selected_post.creator_id,
+                    ticks_spent: 0,
+                    ticks_required: (selected_post.length as f32 * (1.0 - self.read_speed)) as i32,
+                };
+                // }
 
-                let interest = self.core.interests.entry(tag.to_string()).or_insert(0.0);
-                let update_magnitude = if is_new_interest { 0.2 } else { 0.05 };
-
-                *interest += update_magnitude
-                    * self.bias_factor
-                    * experience_factor
-                    * (1.0 + recency_factor);
-                self.last_interaction_times.insert(tag.to_string(), now);
+                // if self.should_read_comment() {
+                //     return AgentState::ReadingComment {
+                //     };
+                // }
+                // if self.should_add_comment() {
+                //     return AgentState::CreatingComment {
+                //     };
+                // }
             }
-            self.viewed_content.push(content_id)
+        }
+
+        // Else, keep scrolling
+        self.proceed_to_scrolling(engine, config)
+    }
+
+    fn proceed_from_reading_post(
+        &mut self,
+        engine: &RecommendationEngine,
+        config: &SimulationConfig,
+        post_id: usize,
+        creator_id: usize,
+        ticks_spent: i32,
+        ticks_required: i32,
+    ) -> AgentState {
+        let new_ticks_spent = ticks_spent + 1;
+
+        if new_ticks_spent >= ticks_required || random::<f32>() > self.attention_span {
+            self.viewed_content.push(post_id);
+
+            // TODO: Update interests based on the post content
+
+            if self.should_go_offline() {
+                AgentState::Offline
+            } else {
+                self.proceed_to_scrolling(engine, config)
+            }
+        } else {
+            AgentState::ReadingPost {
+                post_id,
+                creator_id,
+                ticks_spent: new_ticks_spent,
+                ticks_required,
+            }
         }
     }
 
-    fn update_preferred_creators(&mut self, creator_id: usize, ticks_spent: i32) {
-        let weight = self.preferred_creators.entry(creator_id).or_insert(0.0);
-        *weight += 0.05 * self.bias_factor * ticks_spent as f32;
+    fn proceed_from_creating_post(
+        &mut self,
+        engine: &RecommendationEngine,
+        config: &SimulationConfig,
+        post_id: usize,
+        ticks_spent: i32,
+        ticks_required: i32,
+    ) -> (Option<Content>, AgentState) {
+        let new_ticks_spent = ticks_spent + 1;
+
+        if new_ticks_spent >= ticks_required {
+            let content = self.core.generate_content(config);
+            self.core.created_content.push(content.id);
+
+            let next_state = if self.should_go_offline() {
+                AgentState::Offline
+            } else {
+                self.proceed_to_scrolling(engine, config)
+            };
+
+            (Some(content), next_state)
+        } else {
+            // Continue creating post
+            (
+                None,
+                AgentState::CreatingPost {
+                    post_id,
+                    ticks_spent: new_ticks_spent,
+                    ticks_required,
+                },
+            )
+        }
     }
 
-    fn decay_interests(&mut self, config: &SimulationConfig) {
-        for interest in self.core.interests.values_mut() {
-            *interest *= (1.0 - config.interest_decay_rate) * (1.0 - self.decay_factor);
-        }
+    // Encapsulates retrieving recommendations from engine and adding the retrieved
+    // posts to viewed content
+    fn proceed_to_scrolling(
+        &mut self,
+        engine: &RecommendationEngine,
+        _config: &SimulationConfig,
+    ) -> AgentState {
+        let recommended_post_ids =
+            engine.get_recommendations(&self, 10, chrono::Utc::now().timestamp());
 
-        for weight in self.preferred_creators.values_mut() {
-            *weight *= (1.0 - config.interest_decay_rate) * (1.0 - self.decay_factor);
+        // Add retrieved recommendations to viewed content which the engine
+        // filters out from future recommendations
+        self.viewed_content.extend(recommended_post_ids.clone());
+
+        AgentState::Scrolling {
+            recommended_post_ids,
         }
     }
+
+    fn select_post_from_recommendations(
+        &self,
+        recommended_post_ids: Vec<usize>,
+        engine: &RecommendationEngine,
+    ) -> Option<usize> {
+        if recommended_post_ids.is_empty() {
+            return None;
+        }
+
+        let agent_vector = &self.core.interest_profile.vector_representation;
+
+        let scored_recommendations: Vec<_> = recommended_post_ids
+            .iter()
+            .map(|id| {
+                // TODO: Unwrap bad, should properly handle when ID isn't found
+                let content = engine.get_content_by_id(*id).unwrap();
+                let similarity = engine.calculate_vector_similarity(
+                    agent_vector,
+                    &content.interest_profile.vector_representation,
+                );
+                (content, similarity)
+            })
+            .collect();
+
+        let total_similarity: f32 = scored_recommendations
+            .iter()
+            .map(|(_, similarity)| similarity)
+            .sum();
+
+        if total_similarity == 0.0 {
+            return None;
+        }
+
+        let mut random_value = random::<f32>() * total_similarity;
+
+        for (content, similarity) in &scored_recommendations {
+            random_value -= similarity;
+            if random_value <= 0.0 {
+                return Some(content.id);
+            }
+        }
+
+        scored_recommendations.last().map(|(content, _)| content.id)
+    }
+
+    // TODO: Proper probability calculations for these functions
+    fn should_go_offline(&self) -> bool {
+        // Should get higher probability the longer we've been scrolling for
+        if random::<f32>() > 0.5 {
+            return true;
+        }
+        false
+    }
+
+    fn should_select_post(&self) -> bool {
+        // Higher interest alignment in the post should increase probability of
+        // selecting that post
+        if random::<f32>() > 0.5 {
+            return true;
+        }
+        false
+    }
+
+    // fn should_read_post(&self) -> bool {
+    //     if random::<f32>() > 0.5 {
+    //         return true;
+    //     }
+    //     false
+    // }
+
+    // fn should_read_comment(&self) -> bool {
+    //     if random::<f32>() > 0.5 {
+    //         return true;
+    //     }
+    //     false
+    // }
+    //
+    // fn should_add_comment(&self) -> bool {
+    //     if random::<f32>() > 0.5 {
+    //         return true;
+    //     }
+    //     false
+    // }
 }

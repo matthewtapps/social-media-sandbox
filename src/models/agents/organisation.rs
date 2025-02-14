@@ -1,8 +1,6 @@
+use super::{Agent, AgentCore, AgentState, AgentType, InterestProfile, Topic};
 use crate::{models::SimulationConfig, Content, RecommendationEngine};
 use rand::{random, Rng, RngCore};
-use std::collections::HashMap;
-
-use super::{Activity, Agent, AgentCore, AgentType, ContentCreationState};
 
 #[derive(Debug, Clone)]
 pub struct Organisation {
@@ -12,22 +10,23 @@ pub struct Organisation {
 impl Agent for Organisation {
     fn tick(
         &mut self,
-        engine: &RecommendationEngine,
+        _engine: &RecommendationEngine,
         config: &SimulationConfig,
     ) -> Option<Content> {
-        match self.core.activity {
-            Activity::Creating(ref mut creation_state) => {
-                creation_state.ticks_spent += 1;
-                if creation_state.ticks_spent >= creation_state.ticks_required {
-                    let content = self.core.generate_content(engine, config);
-                    self.core.activity = self.new_creation();
-                    return Some(content);
-                } else {
-                    None
-                }
+        let (content_option, new_state) = match &self.core.state {
+            AgentState::CreatingPost {
+                post_id,
+                ticks_spent,
+                ticks_required,
+            } => self.proceed_from_creating_post(config, *post_id, *ticks_spent, *ticks_required),
+            _ => {
+                // Organizations, like bots, should always be creating
+                (None, self.start_creating_post())
             }
-            _ => None,
-        }
+        };
+
+        self.core.state = new_state;
+        content_option
     }
 
     fn clone_box(&self) -> Box<dyn Agent> {
@@ -38,12 +37,12 @@ impl Agent for Organisation {
         AgentType::Organisation
     }
 
-    fn interests(&self) -> &HashMap<String, f32> {
-        &self.core.interests
+    fn interest_profile(&self) -> &InterestProfile {
+        &self.core.interest_profile
     }
 
-    fn activity(&self) -> &Activity {
-        &self.core.activity
+    fn state(&self) -> &AgentState {
+        &self.core.state
     }
 
     fn id(&self) -> &usize {
@@ -52,44 +51,83 @@ impl Agent for Organisation {
 }
 
 impl Organisation {
-    pub fn new(id: usize, config: &SimulationConfig, engine: &RecommendationEngine) -> Self {
-        let create_speed = 1.0;
-        let ticks_required = 1;
-        let mut interests = HashMap::new();
+    pub fn new(id: usize, config: &SimulationConfig) -> Self {
+        let mut interest_profile = InterestProfile::new(100);
 
-        // Randomly sample from initial tags
-        // TODO: Randomly sample multiple tags
+        // Organizations are focused - they typically have strong opinions about few topics
         let tag = &config.sample_tags[rand::thread_rng().gen_range(0..config.sample_tags.len())];
 
-        // Add tag to interests
-        interests.insert(tag.to_string(), 0.9);
+        // Organizations tend to have strong opinions (agreements closer to +1 or -1)
+        let agreement = if random::<f32>() > 0.5 {
+            0.7 + random::<f32>() * 0.3 // Strong positive (0.7 to 1.0)
+        } else {
+            -1.0 + random::<f32>() * 0.3 // Strong negative (-1.0 to -0.7)
+        };
 
-        let agent_tags: Vec<String> = vec![tag.to_string()];
-        let interest_vector = engine.vectorize_tags(&agent_tags);
+        interest_profile.interests.insert(
+            tag.clone(),
+            Topic {
+                weighted_interest: 1.0, // Will be normalized
+                agreement,
+            },
+        );
+
+        interest_profile.normalise_weights();
 
         Self {
             core: AgentCore {
                 id,
-                content_creation_frequency: random(),
+                content_creation_frequency: 1.0, // Organizations always create
                 created_content: Vec::new(),
-                create_speed,
-                activity: Activity::Creating(ContentCreationState {
-                    content_id: rand::thread_rng().next_u32() as usize,
+                create_speed: 1.0,
+                state: AgentState::CreatingPost {
+                    post_id: rand::thread_rng().next_u32() as usize,
                     ticks_spent: 0,
-                    ticks_required,
-                }),
-                interests,
-                interest_vector,
+                    ticks_required: Self::calculate_post_ticks(),
+                },
+                interest_profile,
             },
         }
     }
 
-    fn new_creation(&self) -> Activity {
-        let ticks_required = (random::<f32>() * 30.0 / self.core.create_speed) as i32;
-        return Activity::Creating(ContentCreationState {
-            content_id: rand::thread_rng().next_u32() as usize,
+    fn proceed_from_creating_post(
+        &mut self,
+        config: &SimulationConfig,
+        post_id: usize,
+        ticks_spent: i32,
+        ticks_required: i32,
+    ) -> (Option<Content>, AgentState) {
+        let new_ticks_spent = ticks_spent + 1;
+
+        if new_ticks_spent >= ticks_required {
+            // Generate content and start new creation
+            let content = self.core.generate_content(config);
+            self.core.created_content.push(content.id);
+
+            (Some(content), self.start_creating_post())
+        } else {
+            // Continue current creation
+            (
+                None,
+                AgentState::CreatingPost {
+                    post_id,
+                    ticks_spent: new_ticks_spent,
+                    ticks_required,
+                },
+            )
+        }
+    }
+
+    fn start_creating_post(&self) -> AgentState {
+        AgentState::CreatingPost {
+            post_id: rand::thread_rng().next_u32() as usize,
             ticks_spent: 0,
-            ticks_required,
-        });
+            ticks_required: Self::calculate_post_ticks(),
+        }
+    }
+
+    // Organizations take longer to create posts than bots
+    fn calculate_post_ticks() -> i32 {
+        (random::<f32>() * 30.0) as i32
     }
 }

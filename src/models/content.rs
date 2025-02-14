@@ -1,12 +1,38 @@
-use nalgebra::DVector;
+use rand::{random, RngCore};
+
+use super::{InterestProfile, SimulationConfig};
 
 #[derive(Debug, Clone)]
 pub struct Content {
     pub id: usize,
     pub creator_id: usize,
     pub timestamp: i64,
-    pub tags: Vec<String>,
-    pub engagement_score: f32,
-    pub vector_representation: DVector<f32>,
+    pub interest_profile: InterestProfile,
     pub length: i32,
+
+    // Reader agent IDs, for deriving engagement score
+    pub readers: Vec<usize>,
+    // Comment IDs, for deriving engagement score
+    pub comments: Vec<usize>,
+
+    pub engagement_score: f32,
+}
+
+impl Content {
+    pub fn new(
+        creator_id: usize,
+        interest_profile: InterestProfile,
+        config: &SimulationConfig,
+    ) -> Content {
+        Self {
+            id: rand::thread_rng().next_u32() as usize,
+            creator_id,
+            timestamp: chrono::Utc::now().timestamp(),
+            interest_profile,
+            length: (random::<f32>() * config.max_content_length as f32) as i32,
+            readers: Vec::new(),
+            comments: Vec::new(),
+            engagement_score: 0.0,
+        }
+    }
 }

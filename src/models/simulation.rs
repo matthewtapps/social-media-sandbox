@@ -18,6 +18,8 @@ pub struct SimulationConfig {
     pub engagement_weight: f32,
     pub tick_rate_ms: i32,
     pub interest_decay_rate: f32,
+    pub min_content_tags: usize,
+    pub max_content_tags: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +58,8 @@ impl Default for SimulationConfig {
             engagement_weight: 0.2,
             tick_rate_ms: 100,
             interest_decay_rate: 0.0,
+            min_content_tags: 1,
+            max_content_tags: 3,
         }
     }
 }
@@ -98,13 +102,13 @@ impl Simulation {
         }
 
         for _ in 0..config.num_bots {
-            let agent = Bot::new(id_counter, &config, &engine);
+            let agent = Bot::new(id_counter, &config);
             agents.push(Box::new(agent));
             id_counter += 1;
         }
 
         for _ in 0..config.num_organisations {
-            let agent = Organisation::new(id_counter, &config, &engine);
+            let agent = Organisation::new(id_counter, &config);
             agents.push(Box::new(agent));
             id_counter += 1;
         }
@@ -143,8 +147,8 @@ impl Simulation {
         let id = self.agents.len();
         let new_agent: Box<dyn Agent> = match agent_type {
             AgentType::Individual => Box::new(Individual::new(id, &self.config, &self.engine)),
-            AgentType::Bot => Box::new(Bot::new(id, &self.config, &self.engine)),
-            AgentType::Organisation => Box::new(Organisation::new(id, &self.config, &self.engine)),
+            AgentType::Bot => Box::new(Bot::new(id, &self.config)),
+            AgentType::Organisation => Box::new(Organisation::new(id, &self.config)),
         };
         self.agents.push(new_agent);
     }
@@ -193,8 +197,8 @@ impl Simulation {
             match agent.get_type() {
                 AgentType::Individual => {
                     println!("\nIndividual State:");
-                    println!("\nActivity: {:?}", agent.activity());
-                    println!("Interests: {:?}", agent.interests());
+                    println!("\nState: {:?}", agent.state());
+                    println!("Interests: {:?}", agent.interest_profile());
                     println!(
                         "Preferred creators: {:?}",
                         agent.preferred_creators().unwrap()

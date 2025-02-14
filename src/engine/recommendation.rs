@@ -1,6 +1,8 @@
+use crate::models::Agent;
+use nalgebra::DVector;
+
 use crate::models::Content;
 use crate::models::Individual;
-use nalgebra::DVector;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -9,9 +11,15 @@ pub struct RecommendationEngine {
     pub index_to_tag: HashMap<usize, String>,
     pub content_pool: Vec<Content>,
     pub vector_dimension: usize,
-    pub diversity_weight: f32,
+    pub config: RecommendationEngineConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct RecommendationEngineConfig {
+    pub interest_weight: f32,
     pub recency_weight: f32,
     pub engagement_weight: f32,
+    pub recency_decay_rate: f32,
 }
 
 impl RecommendationEngine {
@@ -21,24 +29,17 @@ impl RecommendationEngine {
             index_to_tag: HashMap::new(),
             content_pool: Vec::new(),
             vector_dimension: 100,
-            diversity_weight: 0.2,
-            recency_weight: 0.3,
-            engagement_weight: 0.2,
+            config: RecommendationEngineConfig {
+                interest_weight: 0.5,
+                recency_weight: 0.3,
+                engagement_weight: 0.2,
+                recency_decay_rate: 0.05,
+            },
         }
     }
 
-    pub fn vectorize_tags(&self, tags: &[String]) -> DVector<f32> {
-        let mut vector = DVector::zeros(self.vector_dimension);
-        for tag in tags {
-            if let Some(&index) = self.tag_to_index.get(tag) {
-                vector[index] += 1.0;
-            }
-        }
-
-        if vector.norm() > 0.0 {
-            vector.normalize_mut();
-        }
-        vector
+    pub fn get_content_by_id(&self, content_id: usize) -> Option<&Content> {
+        self.content_pool.iter().find(|c| c.id == content_id)
     }
 
     pub fn calculate_content_score(
@@ -47,59 +48,33 @@ impl RecommendationEngine {
         agent: &Individual,
         current_time: i64,
     ) -> f32 {
-        let interest_similarity = content
-            .vector_representation
-            .dot(&agent.core.interest_vector);
+        let interest_alignment = self.calculate_vector_similarity(
+            &agent.interest_profile().vector_representation,
+            &content.interest_profile.vector_representation,
+        );
 
-        let time_diff = current_time - content.timestamp;
-        let recency_score: f32 = (-0.1 * time_diff as f32).exp() as f32;
+        let hours_old = (current_time - content.timestamp) as f32 / 3600.0;
+        let recency_score = (-0.05 * hours_old).exp(); // Decay by ~5% per hour
 
-        let diversity_score = self.calculate_diversity_score(content, agent);
+        let engagement_score = content.engagement_score; // Assuming this is already normalized 0.0-1.0
 
-        let mut score = interest_similarity
-            * (1.0 - self.diversity_weight - self.recency_weight - self.engagement_weight)
-            + recency_score * self.recency_weight
-            + diversity_score * self.diversity_weight
-            + content.engagement_score * self.engagement_weight;
+        let score = interest_alignment * self.config.interest_weight
+            + recency_score * self.config.recency_weight
+            + engagement_score * self.config.engagement_weight;
 
-        if let Some(creator_weight) = agent.preferred_creators.get(&content.creator_id) {
-            let creator_boost = creator_weight * 0.3; // Boost recommendations from preferred creators
-            score += creator_boost;
-        }
-
-        score
+        score.clamp(0.0, 1.0)
     }
 
-    pub fn calculate_diversity_score(&self, content: &Content, agent: &Individual) -> f32 {
-        // If no view history, assume maximum diversity
-        if agent.viewed_content.is_empty() {
-            return 1.0;
+    pub fn calculate_vector_similarity(&self, vec1: &DVector<f32>, vec2: &DVector<f32>) -> f32 {
+        let dot_product = vec1.dot(vec2);
+        let magnitude1 = vec1.norm();
+        let magnitude2 = vec2.norm();
+
+        if magnitude1 == 0.0 || magnitude2 == 0.0 {
+            return 0.0;
         }
 
-        let recent_views: Vec<&Content> = agent
-            .viewed_content
-            .iter()
-            .take(5) // Consider last 5 viewed items
-            .filter_map(|&id| self.content_pool.iter().find(|c| c.id == id))
-            .collect();
-
-        if recent_views.is_empty() {
-            return 1.0;
-        }
-
-        let total_similarity: f32 = recent_views
-            .iter()
-            .map(|&viewed| {
-                let similarity = content
-                    .vector_representation
-                    .dot(&viewed.vector_representation);
-                similarity.max(0.0).min(1.0)
-            })
-            .sum::<f32>();
-
-        let avg_similarity = total_similarity / recent_views.len() as f32;
-
-        1.0 - avg_similarity
+        (dot_product / (magnitude1 * magnitude2)).clamp(0.0, 1.0)
     }
 
     pub fn get_recommendations(
@@ -107,14 +82,14 @@ impl RecommendationEngine {
         agent: &Individual,
         count: usize,
         current_time: i64,
-    ) -> Vec<&Content> {
-        let mut scored_content: Vec<(&Content, f32)> = self
+    ) -> Vec<usize> {
+        let mut scored_content: Vec<(usize, f32)> = self
             .content_pool
             .iter()
             .filter(|content| !agent.viewed_content.contains(&content.id))
             .map(|content| {
                 let score = self.calculate_content_score(content, agent, current_time);
-                (content, score)
+                (content.id, score)
             })
             .collect();
 
@@ -123,25 +98,7 @@ impl RecommendationEngine {
         scored_content
             .into_iter()
             .take(count)
-            .map(|(content, _)| content)
+            .map(|(id, _)| id)
             .collect()
-    }
-
-    pub fn update_agent_interests(&self, agent: &mut Individual, viewed_content: &Content) {
-        for (tag, weight) in viewed_content.tags.iter().filter_map(|tag| {
-            self.tag_to_index
-                .get(tag)
-                .map(|&i| (tag, agent.core.interest_vector[i]))
-        }) {
-            let current_interest = agent.core.interests.entry(tag.clone()).or_insert(0.0);
-            *current_interest += agent.bias_factor * (weight - *current_interest);
-        }
-
-        agent.core.interest_vector =
-            self.vectorize_tags(&agent.core.interests.keys().cloned().collect::<Vec<_>>());
-    }
-
-    pub fn get_content_by_id(&self, content_id: usize) -> Option<&Content> {
-        self.content_pool.iter().find(|c| c.id == content_id)
     }
 }
