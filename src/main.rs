@@ -108,7 +108,7 @@ impl SimulationApp {
                     .text("Base content length"),
             );
             ui.add(
-                egui::Slider::new(&mut self.simulation.config.max_content_length, 0..=200)
+                egui::Slider::new(&mut self.simulation.config.max_post_length, 0..=200)
                     .text("Max content length"),
             );
             ui.add(

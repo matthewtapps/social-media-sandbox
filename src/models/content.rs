@@ -23,16 +23,41 @@ impl Content {
         creator_id: usize,
         interest_profile: InterestProfile,
         config: &SimulationConfig,
-    ) -> Content {
+    ) -> Self {
         Self {
             id: rand::thread_rng().next_u32() as usize,
             creator_id,
             timestamp: chrono::Utc::now().timestamp(),
             interest_profile,
-            length: (random::<f32>() * config.max_content_length as f32) as i32,
+            length: (random::<f32>() * config.max_post_length as f32) as i32,
             readers: Vec::new(),
             comments: Vec::new(),
             engagement_score: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Comment {
+    pub id: usize,
+    pub commentor_id: usize,
+    pub timestamp: i64,
+    pub interest_profile: InterestProfile,
+    pub length: i32,
+}
+
+impl Comment {
+    pub fn new(
+        commentor_id: usize,
+        interest_profile: InterestProfile,
+        config: &SimulationConfig,
+    ) -> Self {
+        Self {
+            id: rand::thread_rng().next_u32() as usize,
+            commentor_id,
+            timestamp: chrono::Utc::now().timestamp(),
+            interest_profile,
+            length: (random::<f32>() * config.max_comment_length as f32) as i32,
         }
     }
 }

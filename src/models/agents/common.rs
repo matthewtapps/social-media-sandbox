@@ -1,5 +1,5 @@
 use crate::models::SimulationConfig;
-use crate::{is_outside_clamp, Content, RecommendationEngine};
+use crate::{Content, RecommendationEngine};
 use nalgebra::DVector;
 use rand::{random, Rng, RngCore};
 use std::any::Any;
@@ -49,6 +49,7 @@ pub enum AgentState {
         creator_id: usize,
         ticks_spent: i32,
         ticks_required: i32,
+        potential_interest_gain: f32,
     },
     ReadingComment {
         post_id: usize,
@@ -96,7 +97,7 @@ impl AgentCore {
             creator_id: self.id,
             timestamp: chrono::Utc::now().timestamp(),
             interest_profile: content_profile,
-            length: (random::<f32>() * config.max_content_length as f32) as i32,
+            length: (random::<f32>() * config.max_post_length as f32) as i32,
             readers: Vec::new(),
             comments: Vec::new(),
             engagement_score: 0.0,
@@ -159,15 +160,9 @@ impl InterestProfile {
         filtered
     }
 
-    pub fn update_interest_from_content(&mut self, content: &Content, interest_per_tick: f32) {
-        if is_outside_clamp(interest_per_tick, (0.0, 1.0)) {
-            panic!(
-                "Agreement value provided to update_interest_from_content outside of allowed range"
-            );
-        }
-
-        for (tag, content_interest) in &content.interest_profile.interests {
-            let weighted_addition = content_interest.weighted_interest * interest_per_tick;
+    pub fn update_interest_from_post(&mut self, post: &Content, interest: f32) {
+        for (tag, content_interest) in &post.interest_profile.interests {
+            let weighted_addition = content_interest.weighted_interest * interest;
 
             let topic = self.interests.entry(tag.clone()).or_insert(Topic {
                 weighted_interest: 0.0,
@@ -181,6 +176,12 @@ impl InterestProfile {
     }
 
     pub fn normalise_weights(&mut self) {
+        self.total_weight = self
+            .interests
+            .values()
+            .map(|topic| topic.weighted_interest)
+            .sum();
+
         if self.total_weight == 0.0 {
             return;
         }

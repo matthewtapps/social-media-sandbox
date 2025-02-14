@@ -44,6 +44,7 @@ impl Agent for Individual {
                 creator_id,
                 ticks_spent,
                 ticks_required,
+                potential_interest_gain,
             } => (
                 None,
                 self.proceed_from_reading_post(
@@ -53,6 +54,7 @@ impl Agent for Individual {
                     *creator_id,
                     *ticks_spent,
                     *ticks_required,
+                    *potential_interest_gain,
                 ),
             ),
             AgentState::CreatingPost {
@@ -107,7 +109,7 @@ impl Individual {
                 interest_profile: InterestProfile::new(100),
             },
             next_post_likelihood: random(),
-            attention_span: random(),
+            attention_span: random::<f32>().min(0.5),
             viewed_content: Vec::new(),
             read_speed: random(),
             session_length_ticks: 0,
@@ -133,10 +135,6 @@ impl Individual {
         config: &SimulationConfig,
         current_recommendations: Vec<usize>,
     ) -> AgentState {
-        if self.should_go_offline() {
-            return AgentState::Offline;
-        }
-
         if self.should_select_post() {
             if let Some(selected_post) =
                 self.select_post_from_recommendations(current_recommendations, engine)
@@ -151,6 +149,8 @@ impl Individual {
                     creator_id: selected_post.creator_id,
                     ticks_spent: 0,
                     ticks_required: (selected_post.length as f32 * (1.0 - self.read_speed)) as i32,
+                    potential_interest_gain: self
+                        .calculate_potential_interest_gain(selected_post, engine),
                 };
                 // }
 
@@ -165,6 +165,10 @@ impl Individual {
             }
         }
 
+        if self.should_go_offline() {
+            return AgentState::Offline;
+        }
+
         // Else, keep scrolling
         self.proceed_to_scrolling(engine, config)
     }
@@ -175,12 +179,13 @@ impl Individual {
         config: &SimulationConfig,
         post_id: usize,
         creator_id: usize,
-        ticks_spent: i32,
+        mut ticks_spent: i32,
         ticks_required: i32,
+        potential_interest_gain: f32,
     ) -> AgentState {
-        let new_ticks_spent = ticks_spent + 1;
+        ticks_spent += 1;
 
-        if new_ticks_spent >= ticks_required || random::<f32>() > self.attention_span {
+        if ticks_spent >= ticks_required || random::<f32>() > self.attention_span {
             self.viewed_content.push(post_id);
 
             // TODO: Update interests based on the post content
@@ -191,13 +196,50 @@ impl Individual {
                 self.proceed_to_scrolling(engine, config)
             }
         } else {
+            let post = engine.get_content_by_id(post_id).unwrap();
+            self.update_interests_from_content(post, ticks_spent, potential_interest_gain);
             AgentState::ReadingPost {
                 post_id,
                 creator_id,
-                ticks_spent: new_ticks_spent,
+                ticks_spent,
                 ticks_required,
+                potential_interest_gain,
             }
         }
+    }
+
+    fn update_interests_from_content(
+        &mut self,
+        post: &Content,
+        ticks_spent: i32,
+        potential_interest_gain: f32,
+    ) {
+        let interest_this_tick = potential_interest_gain / ticks_spent as f32;
+
+        self.core
+            .interest_profile
+            .update_interest_from_post(post, interest_this_tick);
+    }
+
+    fn calculate_potential_interest_gain(
+        &self,
+        content: &Content,
+        engine: &RecommendationEngine,
+    ) -> f32 {
+        let base_gain = 0.2;
+
+        let similarity = if self.core.interest_profile.interests.is_empty() {
+            0.0
+        } else {
+            engine.calculate_vector_similarity(
+                &self.core.interest_profile.vector_representation,
+                &content.interest_profile.vector_representation,
+            )
+        };
+
+        let similarity_multiplier = 1.0 + similarity.min(1.0);
+
+        base_gain * similarity_multiplier
     }
 
     fn proceed_from_creating_post(
@@ -282,10 +324,6 @@ impl Individual {
             .map(|(_, similarity)| similarity)
             .sum();
 
-        if total_similarity == 0.0 {
-            return None;
-        }
-
         let mut random_value = random::<f32>() * total_similarity;
 
         for (content, similarity) in &scored_recommendations {
@@ -301,9 +339,9 @@ impl Individual {
     // TODO: Proper probability calculations for these functions
     fn should_go_offline(&self) -> bool {
         // Should get higher probability the longer we've been scrolling for
-        if random::<f32>() > 0.5 {
-            return true;
-        }
+        // if random::<f32>() > 0.9 {
+        //     return true;
+        // }
         false
     }
 
