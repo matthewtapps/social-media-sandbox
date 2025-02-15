@@ -1,6 +1,6 @@
 use crate::{
     models::{InterestProfile, SimulationConfig},
-    Content, RecommendationEngine,
+    Post, RecommendationEngine,
 };
 use rand::random;
 
@@ -28,11 +28,7 @@ pub struct Individual {
 }
 
 impl Agent for Individual {
-    fn tick(
-        &mut self,
-        engine: &RecommendationEngine,
-        config: &SimulationConfig,
-    ) -> Option<Content> {
+    fn tick(&mut self, engine: &RecommendationEngine, config: &SimulationConfig) -> Option<Post> {
         self.session_length_ticks += 1;
         let (content_option, new_state) = match &self.core.state {
             AgentState::Offline => (None, self.proceed_from_offline(engine, config)),
@@ -213,7 +209,7 @@ impl Individual {
 
     fn update_interests_from_content(
         &mut self,
-        post: &Content,
+        post: &Post,
         ticks_spent: i32,
         potential_interest_gain: f32,
     ) {
@@ -226,7 +222,7 @@ impl Individual {
 
     fn calculate_potential_interest_gain(
         &self,
-        content: &Content,
+        content: &Post,
         engine: &RecommendationEngine,
     ) -> f32 {
         let base_gain = 0.2;
@@ -252,7 +248,7 @@ impl Individual {
         post_id: usize,
         ticks_spent: i32,
         ticks_required: i32,
-    ) -> (Option<Content>, AgentState) {
+    ) -> (Option<Post>, AgentState) {
         let new_ticks_spent = ticks_spent + 1;
 
         if new_ticks_spent >= ticks_required {

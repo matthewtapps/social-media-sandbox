@@ -1,13 +1,12 @@
 use crate::models::{InterestProfile, SimulationConfig};
-use crate::{Content, RecommendationEngine};
+use crate::{Post, RecommendationEngine};
 use rand::{random, RngCore};
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub trait Agent: Debug + Any {
-    fn tick(&mut self, engine: &RecommendationEngine, config: &SimulationConfig)
-        -> Option<Content>;
+    fn tick(&mut self, engine: &RecommendationEngine, config: &SimulationConfig) -> Option<Post>;
 
     fn clone_box(&self) -> Box<dyn Agent>;
 
@@ -84,14 +83,14 @@ pub struct AgentCore {
 }
 
 impl AgentCore {
-    pub fn generate_content(&self, config: &SimulationConfig) -> Content {
+    pub fn generate_content(&self, config: &SimulationConfig) -> Post {
         let selected_tags = self
             .interest_profile
             .select_content_tags(config.min_content_tags, config.max_content_tags);
 
         let content_profile = self.interest_profile.filtered_clone(&selected_tags);
 
-        Content {
+        Post {
             id: rand::thread_rng().next_u32() as usize,
             creator_id: self.id,
             timestamp: chrono::Utc::now().timestamp(),

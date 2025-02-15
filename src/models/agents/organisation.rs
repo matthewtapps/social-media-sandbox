@@ -1,7 +1,7 @@
 use super::{Agent, AgentCore, AgentState, AgentType};
 use crate::{
     models::{InterestProfile, SimulationConfig, Topic},
-    Content, RecommendationEngine,
+    Post, RecommendationEngine,
 };
 use rand::{random, Rng, RngCore};
 
@@ -11,11 +11,7 @@ pub struct Organisation {
 }
 
 impl Agent for Organisation {
-    fn tick(
-        &mut self,
-        _engine: &RecommendationEngine,
-        config: &SimulationConfig,
-    ) -> Option<Content> {
+    fn tick(&mut self, _engine: &RecommendationEngine, config: &SimulationConfig) -> Option<Post> {
         let (content_option, new_state) = match &self.core.state {
             AgentState::CreatingPost {
                 post_id,
@@ -99,7 +95,7 @@ impl Organisation {
         post_id: usize,
         ticks_spent: i32,
         ticks_required: i32,
-    ) -> (Option<Content>, AgentState) {
+    ) -> (Option<Post>, AgentState) {
         let new_ticks_spent = ticks_spent + 1;
 
         if new_ticks_spent >= ticks_required {

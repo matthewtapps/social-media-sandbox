@@ -1,15 +1,15 @@
 use crate::models::Agent;
 use nalgebra::DVector;
 
-use crate::models::Content;
 use crate::models::Individual;
+use crate::models::Post;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct RecommendationEngine {
     pub tag_to_index: HashMap<String, usize>,
     pub index_to_tag: HashMap<usize, String>,
-    pub content_pool: Vec<Content>,
+    pub content_pool: Vec<Post>,
     pub vector_dimension: usize,
     pub config: RecommendationEngineConfig,
 }
@@ -38,13 +38,13 @@ impl RecommendationEngine {
         }
     }
 
-    pub fn get_content_by_id(&self, content_id: usize) -> Option<&Content> {
+    pub fn get_content_by_id(&self, content_id: usize) -> Option<&Post> {
         self.content_pool.iter().find(|c| c.id == content_id)
     }
 
     pub fn calculate_content_score(
         &self,
-        content: &Content,
+        content: &Post,
         agent: &Individual,
         current_time: i64,
     ) -> f32 {
@@ -103,7 +103,7 @@ impl RecommendationEngine {
     }
 
     pub fn increase_engagement_score(&mut self, content_id: usize) {
-        let post: &mut Content = self
+        let post: &mut Post = self
             .content_pool
             .iter_mut()
             .find(|c| c.id == content_id)

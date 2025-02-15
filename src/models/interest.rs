@@ -2,7 +2,7 @@ use nalgebra::DVector;
 use rand::{random, Rng};
 use std::collections::HashMap;
 
-use super::Content;
+use super::Post;
 
 #[derive(Debug, Clone)]
 pub struct Topic {
@@ -59,7 +59,7 @@ impl InterestProfile {
         filtered
     }
 
-    pub fn update_interest_from_post(&mut self, post: &Content, interest: f32) {
+    pub fn update_interest_from_post(&mut self, post: &Post, interest: f32) {
         for (tag, content_interest) in &post.interest_profile.interests {
             let weighted_addition = content_interest.weighted_interest * interest;
 

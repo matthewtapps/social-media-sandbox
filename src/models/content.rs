@@ -3,7 +3,7 @@ use rand::{random, RngCore};
 use super::{InterestProfile, SimulationConfig};
 
 #[derive(Debug, Clone)]
-pub struct Content {
+pub struct Post {
     pub id: usize,
     pub creator_id: usize,
     pub timestamp: i64,
@@ -18,7 +18,7 @@ pub struct Content {
     pub engagement_score: f32,
 }
 
-impl Content {
+impl Post {
     pub fn new(
         creator_id: usize,
         interest_profile: InterestProfile,
