@@ -35,6 +35,10 @@ impl Content {
             engagement_score: 0.0,
         }
     }
+
+    pub fn increase_engagement(&mut self) {
+        self.engagement_score += 1.0;
+    }
 }
 
 #[derive(Debug, Clone)]

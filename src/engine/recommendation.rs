@@ -101,4 +101,14 @@ impl RecommendationEngine {
             .map(|(id, _)| id)
             .collect()
     }
+
+    pub fn increase_engagement_score(&mut self, content_id: usize) {
+        let post: &mut Content = self
+            .content_pool
+            .iter_mut()
+            .find(|c| c.id == content_id)
+            .unwrap();
+
+        post.increase_engagement();
+    }
 }
