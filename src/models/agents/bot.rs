@@ -1,7 +1,7 @@
 use super::{Agent, AgentCore, AgentState, AgentType};
 use crate::{
     models::{InterestProfile, SimulationConfig, Topic},
-    Post, RecommendationEngine,
+    RecommendationEngine,
 };
 use rand::{random, Rng, RngCore};
 
@@ -11,26 +11,27 @@ pub struct Bot {
 }
 
 impl Agent for Bot {
-    fn tick(
-        &mut self,
-        _engine: &mut RecommendationEngine,
-        config: &SimulationConfig,
-    ) -> Option<Post> {
+    fn tick(&mut self, engine: &mut RecommendationEngine, config: &SimulationConfig) {
         // Extract data from current creation state
-        let (content_option, new_state) = match &self.core.state {
+        let new_state = match &self.core.state {
             AgentState::CreatingPost {
                 post_id,
                 ticks_spent,
                 ticks_required,
-            } => self.proceed_from_creating_post(config, *post_id, *ticks_spent, *ticks_required),
+            } => self.proceed_from_creating_post(
+                config,
+                engine,
+                *post_id,
+                *ticks_spent,
+                *ticks_required,
+            ),
             _ => {
                 // Bot should always be creating, so initialize creation if in any other state
-                (None, self.start_creating_post(config))
+                self.start_creating_post(config)
             }
         };
 
         self.core.state = new_state;
-        content_option
     }
 
     fn clone_box(&self) -> Box<dyn Agent> {
@@ -93,10 +94,11 @@ impl Bot {
     fn proceed_from_creating_post(
         &mut self,
         config: &SimulationConfig,
+        engine: &mut RecommendationEngine,
         post_id: usize,
         ticks_spent: i32,
         ticks_required: i32,
-    ) -> (Option<Post>, AgentState) {
+    ) -> AgentState {
         let new_ticks_spent = ticks_spent + 1;
 
         if new_ticks_spent >= ticks_required {
@@ -104,17 +106,16 @@ impl Bot {
             let content = self.core.generate_content(config);
             self.core.created_content.push(content.id);
 
-            (Some(content), self.start_creating_post(config))
+            engine.create_post(content);
+
+            return self.start_creating_post(config);
         } else {
             // Continue current creation
-            (
-                None,
-                AgentState::CreatingPost {
-                    post_id,
-                    ticks_spent: new_ticks_spent,
-                    ticks_required,
-                },
-            )
+            return AgentState::CreatingPost {
+                post_id,
+                ticks_spent: new_ticks_spent,
+                ticks_required,
+            };
         }
     }
 

@@ -153,4 +153,8 @@ impl RecommendationEngine {
 
         post.comments.push(comment);
     }
+
+    pub fn create_post(&mut self, post: Post) {
+        self.content_pool.push(post);
+    }
 }

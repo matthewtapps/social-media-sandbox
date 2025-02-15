@@ -133,15 +133,9 @@ impl Simulation {
         if elapsed >= self.config.tick_rate_ms as i64 {
             self.last_tick = self.current_tick;
 
-            let mut new_content = Vec::new();
-
             for agent in self.agents.iter_mut() {
-                if let Some(content) = agent.tick(&mut self.engine, &self.config) {
-                    new_content.push(content);
-                }
+                agent.tick(&mut self.engine, &self.config);
             }
-
-            self.engine.content_pool.extend(new_content);
         }
     }
 

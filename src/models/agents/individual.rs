@@ -28,37 +28,27 @@ pub struct Individual {
 }
 
 impl Agent for Individual {
-    fn tick(
-        &mut self,
-        engine: &mut RecommendationEngine,
-        config: &SimulationConfig,
-    ) -> Option<Post> {
+    fn tick(&mut self, engine: &mut RecommendationEngine, config: &SimulationConfig) {
         self.session_length_ticks += 1;
-        let (content_option, new_state) = match &self.core.state {
-            AgentState::Offline => (None, self.proceed_from_offline(engine, config)),
+        let new_state = match &self.core.state {
+            AgentState::Offline => self.proceed_from_offline(engine, config),
             AgentState::Scrolling {
                 recommended_post_ids,
-            } => (
-                None,
-                self.proceed_from_scrolling(engine, config, recommended_post_ids.clone()),
-            ),
+            } => self.proceed_from_scrolling(engine, config, recommended_post_ids.clone()),
             AgentState::ReadingPost {
                 post_id,
                 creator_id,
                 ticks_spent,
                 ticks_required,
                 potential_interest_gain,
-            } => (
-                None,
-                self.proceed_from_reading_post(
-                    engine,
-                    config,
-                    *post_id,
-                    *creator_id,
-                    *ticks_spent,
-                    *ticks_required,
-                    *potential_interest_gain,
-                ),
+            } => self.proceed_from_reading_post(
+                engine,
+                config,
+                *post_id,
+                *creator_id,
+                *ticks_spent,
+                *ticks_required,
+                *potential_interest_gain,
             ),
             AgentState::CreatingPost {
                 post_id,
@@ -79,39 +69,32 @@ impl Agent for Individual {
                 ticks_spent,
                 ticks_required,
                 potential_interest_gain,
-            } => (
-                None,
-                self.proceed_from_reading_comments(
-                    engine,
-                    config,
-                    *post_id,
-                    *creator_id,
-                    current_comment_ids.clone(),
-                    *current_comment_index,
-                    *ticks_spent,
-                    *ticks_required,
-                    *potential_interest_gain,
-                ),
+            } => self.proceed_from_reading_comments(
+                engine,
+                config,
+                *post_id,
+                *creator_id,
+                current_comment_ids.clone(),
+                *current_comment_index,
+                *ticks_spent,
+                *ticks_required,
+                *potential_interest_gain,
             ),
             AgentState::CreatingComment {
                 post_id,
                 comment_id,
                 ticks_spent,
                 ticks_required,
-            } => (
-                None,
-                self.proceed_from_creating_comment(
-                    engine,
-                    config,
-                    *post_id,
-                    *comment_id,
-                    *ticks_spent,
-                    *ticks_required,
-                ),
+            } => self.proceed_from_creating_comment(
+                engine,
+                config,
+                *post_id,
+                *comment_id,
+                *ticks_spent,
+                *ticks_required,
             ),
         };
         self.core.state = new_state;
-        content_option
     }
 
     fn clone_box(&self) -> Box<dyn Agent> {
@@ -454,35 +437,33 @@ impl Individual {
 
     fn proceed_from_creating_post(
         &mut self,
-        engine: &RecommendationEngine,
+        engine: &mut RecommendationEngine,
         config: &SimulationConfig,
         post_id: usize,
-        ticks_spent: i32,
+        mut ticks_spent: i32,
         ticks_required: i32,
-    ) -> (Option<Post>, AgentState) {
-        let new_ticks_spent = ticks_spent + 1;
+    ) -> AgentState {
+        ticks_spent += 1;
 
-        if new_ticks_spent >= ticks_required {
+        if ticks_spent >= ticks_required {
             let content = self.core.generate_content(config);
+
             self.core.created_content.push(content.id);
 
-            let next_state = if self.should_go_offline() {
-                AgentState::Offline
-            } else {
-                self.proceed_to_scrolling(engine, config)
-            };
+            engine.create_post(content);
 
-            (Some(content), next_state)
+            if self.should_go_offline() {
+                return AgentState::Offline;
+            } else {
+                return self.proceed_to_scrolling(engine, config);
+            };
         } else {
             // Continue creating post
-            (
-                None,
-                AgentState::CreatingPost {
-                    post_id,
-                    ticks_spent: new_ticks_spent,
-                    ticks_required,
-                },
-            )
+            AgentState::CreatingPost {
+                post_id,
+                ticks_spent,
+                ticks_required,
+            }
         }
     }
 

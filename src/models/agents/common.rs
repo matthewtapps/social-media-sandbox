@@ -6,11 +6,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub trait Agent: Debug + Any {
-    fn tick(
-        &mut self,
-        engine: &mut RecommendationEngine,
-        config: &SimulationConfig,
-    ) -> Option<Post>;
+    fn tick(&mut self, engine: &mut RecommendationEngine, config: &SimulationConfig);
 
     fn clone_box(&self) -> Box<dyn Agent>;
 
