@@ -1,8 +1,8 @@
 use crate::{
-    models::{InterestProfile, SimulationConfig},
+    models::{content::Comment, InterestProfile, SimulationConfig},
     Post, RecommendationEngine,
 };
-use rand::random;
+use rand::{random, RngCore};
 
 use super::{Agent, AgentCore, AgentState, AgentType};
 
@@ -66,6 +66,28 @@ impl Agent for Individual {
                 *post_id,
                 *ticks_spent,
                 *ticks_required,
+            ),
+            AgentState::ReadingComments {
+                post_id,
+                creator_id,
+                current_comment_ids,
+                current_comment_index,
+                ticks_spent,
+                ticks_required,
+                potential_interest_gain,
+            } => (
+                None,
+                self.proceed_from_reading_comments(
+                    engine,
+                    config,
+                    *post_id,
+                    *creator_id,
+                    current_comment_ids.clone(),
+                    *current_comment_index,
+                    *ticks_spent,
+                    *ticks_required,
+                    *potential_interest_gain,
+                ),
             ),
             _ => {
                 unimplemented!()
@@ -134,41 +156,81 @@ impl Individual {
         config: &SimulationConfig,
         current_recommendations: Vec<usize>,
     ) -> AgentState {
+        // First check if we should select a post to interact with
         if self.should_select_post() {
-            if let Some(selected_post) =
+            if let Some(selected_post_id) =
                 self.select_post_from_recommendations(current_recommendations, engine)
             {
-                // TODO: Unwrap bad, should proeprly handle when id isn't found
-                let selected_post = engine.get_content_by_id(selected_post).unwrap();
-                // TODO: Comments logic
-                //
-                // if self.should_read_post() {
-                return AgentState::ReadingPost {
-                    post_id: selected_post.id,
-                    creator_id: selected_post.creator_id,
-                    ticks_spent: 0,
-                    ticks_required: (selected_post.length as f32 * (1.0 - self.read_speed)) as i32,
-                    potential_interest_gain: self
-                        .calculate_potential_interest_gain(selected_post, engine),
-                };
-                // }
+                // Get the selected post
+                if let Some(selected_post) = engine.get_content_by_id(selected_post_id) {
+                    // Decide what to do with the selected post
+                    if self.should_read_post() {
+                        return AgentState::ReadingPost {
+                            post_id: selected_post.id,
+                            creator_id: selected_post.creator_id,
+                            ticks_spent: 0,
+                            ticks_required: (selected_post.length as f32 * (1.0 - self.read_speed))
+                                as i32,
+                            potential_interest_gain: self
+                                .calculate_potential_interest_gain(selected_post, engine),
+                        };
+                    }
 
-                // if self.should_read_comment() {
-                //     return AgentState::ReadingComment {
-                //     };
-                // }
-                // if self.should_add_comment() {
-                //     return AgentState::CreatingComment {
-                //     };
-                // }
+                    if self.should_read_comments() {
+                        // Get initial batch of comments
+                        if let Some(comment_ids) = engine.get_comment_recommendations(
+                            selected_post.id,
+                            Vec::new(), // No viewed comments yet
+                            10,
+                        ) {
+                            if !comment_ids.is_empty() {
+                                // Find the first comment to start reading
+                                if let Some(first_comment) = selected_post
+                                    .comments
+                                    .iter()
+                                    .find(|c| c.id == comment_ids[0])
+                                {
+                                    return AgentState::ReadingComments {
+                                        post_id: selected_post.id,
+                                        creator_id: selected_post.creator_id,
+                                        current_comment_ids: comment_ids,
+                                        current_comment_index: 0,
+                                        ticks_spent: 0,
+                                        ticks_required: (first_comment.length as f32
+                                            * (1.0 - self.read_speed))
+                                            as i32,
+                                        potential_interest_gain: self
+                                            .calculate_potential_interest_gain_from_comment(
+                                                first_comment,
+                                                engine,
+                                            ),
+                                    };
+                                }
+                            }
+                        }
+                    }
+
+                    if self.should_write_comment() {
+                        let comment_id = rand::thread_rng().next_u32() as usize;
+                        return AgentState::CreatingComment {
+                            post_id: selected_post.id,
+                            comment_id,
+                            ticks_spent: 0,
+                            ticks_required: (config.max_comment_length as f32
+                                * (1.0 - self.core.create_speed))
+                                as i32,
+                        };
+                    }
+                }
             }
         }
 
+        // Check if we should go offline
         if self.should_go_offline() {
             return AgentState::Offline;
         }
 
-        // Else, keep scrolling
+        // If we didn't transition to any other state, keep scrolling
         self.proceed_to_scrolling(engine, config)
     }
 
@@ -196,7 +258,11 @@ impl Individual {
             }
         } else {
             let post = engine.get_content_by_id(post_id).unwrap();
-            self.update_interests_from_content(post, ticks_spent, potential_interest_gain);
+            self.update_interests_from_profile(
+                &post.interest_profile,
+                ticks_spent,
+                potential_interest_gain,
+            );
             AgentState::ReadingPost {
                 post_id,
                 creator_id,
@@ -207,17 +273,124 @@ impl Individual {
         }
     }
 
-    fn update_interests_from_content(
+    fn update_interests_from_profile(
         &mut self,
-        post: &Post,
+        interest_profile: &InterestProfile,
         ticks_spent: i32,
         potential_interest_gain: f32,
     ) {
-        let interest_this_tick = potential_interest_gain / ticks_spent as f32;
+        // Starts at 1/2 gained in first tick, then progressively approaches
+        // 1/1 in subsequent ticks
+        let interest_this_tick = potential_interest_gain / (ticks_spent + 1) as f32;
 
         self.core
             .interest_profile
-            .update_interest_from_post(post, interest_this_tick);
+            .update_interest_from_profile(&interest_profile, interest_this_tick);
+    }
+
+    fn proceed_from_reading_comments(
+        &mut self,
+        engine: &RecommendationEngine,
+        config: &SimulationConfig,
+        post_id: usize,
+        creator_id: usize,
+        current_comment_ids: Vec<usize>,
+        current_comment_index: usize,
+        mut ticks_spent: i32,
+        ticks_required: i32,
+        potential_interest_gain: f32,
+    ) -> AgentState {
+        // Progress reading current comment at start of tick
+        ticks_spent += 1;
+
+        if let Some(post) = engine.get_content_by_id(post_id) {
+            if let Some(current_comment) = post
+                .comments
+                .iter()
+                .find(|c| c.id == current_comment_ids[current_comment_index])
+            {
+                self.update_interests_from_profile(
+                    &current_comment.interest_profile,
+                    ticks_spent,
+                    potential_interest_gain,
+                );
+
+                // If we're finished or bored
+                if ticks_spent >= ticks_required || random::<f32>() > self.attention_span {
+                    // Maybe read the post if we haven't yet
+                    if self.should_read_post() && !self.viewed_content.contains(&post_id) {
+                        return AgentState::ReadingPost {
+                            post_id,
+                            creator_id,
+                            ticks_spent: 0,
+                            ticks_required: (post.length as f32 * (1.0 - self.read_speed)) as i32,
+                            potential_interest_gain: self
+                                .calculate_potential_interest_gain(post, engine),
+                        };
+                    }
+
+                    // Maybe write our own comment
+                    if self.should_write_comment() {
+                        let comment_id = rand::thread_rng().next_u32() as usize;
+                        return AgentState::CreatingComment {
+                            post_id,
+                            comment_id,
+                            ticks_spent: 0,
+                            ticks_required: (config.max_comment_length as f32
+                                * (1.0 - self.core.create_speed))
+                                as i32,
+                        };
+                    }
+
+                    // Maybe go offline
+                    if self.should_go_offline() {
+                        return AgentState::Offline;
+                    }
+
+                    // Maybe move to next comment
+                    let next_index = current_comment_index + 1;
+                    if next_index < current_comment_ids.len() {
+                        if let Some(next_comment) = post
+                            .comments
+                            .iter()
+                            .find(|c| c.id == current_comment_ids[next_index])
+                        {
+                            return AgentState::ReadingComments {
+                                post_id,
+                                creator_id,
+                                current_comment_ids,
+                                current_comment_index: next_index,
+                                ticks_spent: 0,
+                                ticks_required: (next_comment.length as f32
+                                    * (1.0 - self.read_speed))
+                                    as i32,
+                                potential_interest_gain: self
+                                    .calculate_potential_interest_gain_from_comment(
+                                        next_comment,
+                                        engine,
+                                    ),
+                            };
+                        }
+                    }
+
+                    // Maybe go back to scrolling
+                    if self.should_scroll() {
+                        return self.proceed_to_scrolling(engine, config);
+                    }
+                }
+            }
+        }
+
+        // Continue reading current comment if we haven't finished and didn't transition to another state
+        AgentState::ReadingComments {
+            post_id,
+            creator_id,
+            current_comment_ids,
+            current_comment_index,
+            ticks_spent,
+            ticks_required,
+            potential_interest_gain,
+        }
     }
 
     fn calculate_potential_interest_gain(
@@ -233,6 +406,27 @@ impl Individual {
             engine.calculate_vector_similarity(
                 &self.core.interest_profile.vector_representation,
                 &content.interest_profile.vector_representation,
+            )
+        };
+
+        let similarity_multiplier = 1.0 + similarity.min(1.0);
+
+        base_gain * similarity_multiplier
+    }
+
+    fn calculate_potential_interest_gain_from_comment(
+        &self,
+        comment: &Comment,
+        engine: &RecommendationEngine,
+    ) -> f32 {
+        let base_gain = 0.2;
+
+        let similarity = if self.core.interest_profile.interests.is_empty() {
+            0.0
+        } else {
+            engine.calculate_vector_similarity(
+                &self.core.interest_profile.vector_representation,
+                &comment.interest_profile.vector_representation,
             )
         };
 
@@ -283,7 +477,7 @@ impl Individual {
         _config: &SimulationConfig,
     ) -> AgentState {
         let recommended_post_ids =
-            engine.get_recommendations(&self, 10, chrono::Utc::now().timestamp());
+            engine.get_post_recommendations(&self, 10, chrono::Utc::now().timestamp());
 
         // Add retrieved recommendations to viewed content which the engine
         // filters out from future recommendations
@@ -353,24 +547,31 @@ impl Individual {
         false
     }
 
-    // fn should_read_post(&self) -> bool {
-    //     if random::<f32>() > 0.5 {
-    //         return true;
-    //     }
-    //     false
-    // }
+    fn should_read_post(&self) -> bool {
+        if random::<f32>() > 0.5 {
+            return true;
+        }
+        false
+    }
 
-    // fn should_read_comment(&self) -> bool {
-    //     if random::<f32>() > 0.5 {
-    //         return true;
-    //     }
-    //     false
-    // }
-    //
-    // fn should_add_comment(&self) -> bool {
-    //     if random::<f32>() > 0.5 {
-    //         return true;
-    //     }
-    //     false
-    // }
+    fn should_read_comments(&self) -> bool {
+        if random::<f32>() > 0.5 {
+            return true;
+        }
+        false
+    }
+
+    fn should_write_comment(&self) -> bool {
+        if random::<f32>() > 0.5 {
+            return true;
+        }
+        false
+    }
+
+    fn should_scroll(&self) -> bool {
+        if random::<f32>() > 0.5 {
+            return true;
+        }
+        false
+    }
 }

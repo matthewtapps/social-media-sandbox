@@ -1,3 +1,4 @@
+use crate::models::content::Comment;
 use crate::models::Agent;
 use nalgebra::DVector;
 
@@ -42,6 +43,13 @@ impl RecommendationEngine {
         self.content_pool.iter().find(|c| c.id == content_id)
     }
 
+    pub fn get_comments_by_post_id(&self, content_id: usize) -> Option<Vec<&Comment>> {
+        self.content_pool
+            .iter()
+            .find(|c| c.id == content_id)
+            .map(|post| post.comments.iter().collect())
+    }
+
     pub fn calculate_content_score(
         &self,
         content: &Post,
@@ -77,13 +85,13 @@ impl RecommendationEngine {
         (dot_product / (magnitude1 * magnitude2)).clamp(0.0, 1.0)
     }
 
-    pub fn get_recommendations(
+    pub fn get_post_recommendations(
         &self,
         agent: &Individual,
         count: usize,
         current_time: i64,
     ) -> Vec<usize> {
-        let mut scored_content: Vec<(usize, f32)> = self
+        let mut scored_posts: Vec<(usize, f32)> = self
             .content_pool
             .iter()
             .filter(|content| !agent.viewed_content.contains(&content.id))
@@ -93,13 +101,37 @@ impl RecommendationEngine {
             })
             .collect();
 
-        scored_content.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scored_posts.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-        scored_content
+        scored_posts
             .into_iter()
             .take(count)
             .map(|(id, _)| id)
             .collect()
+    }
+
+    pub fn get_comment_recommendations(
+        &self,
+        post_id: usize,
+        current_comment_ids: Vec<usize>,
+        count: usize,
+    ) -> Option<Vec<usize>> {
+        self.get_content_by_id(post_id).map(|post| {
+            let current_ids: std::collections::HashSet<_> =
+                current_comment_ids.into_iter().collect();
+
+            let mut comments: Vec<(&Comment, usize)> = post
+                .comments
+                .iter()
+                .filter(|comment| !current_ids.contains(&comment.id))
+                .map(|comment| (comment, comment.id))
+                .collect();
+
+            comments.sort_by(|(a, _), (b, _)| {
+                b.engagement_score.partial_cmp(&a.engagement_score).unwrap()
+            });
+            comments.into_iter().take(count).map(|(_, id)| id).collect()
+        })
     }
 
     pub fn increase_engagement_score(&mut self, content_id: usize) {

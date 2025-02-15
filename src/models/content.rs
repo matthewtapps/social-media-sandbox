@@ -13,7 +13,7 @@ pub struct Post {
     // Reader agent IDs, for deriving engagement score
     pub readers: Vec<usize>,
     // Comment IDs, for deriving engagement score
-    pub comments: Vec<usize>,
+    pub comments: Vec<Comment>,
 
     pub engagement_score: f32,
 }
@@ -48,6 +48,7 @@ pub struct Comment {
     pub timestamp: i64,
     pub interest_profile: InterestProfile,
     pub length: i32,
+    pub engagement_score: f32,
 }
 
 impl Comment {
@@ -62,6 +63,7 @@ impl Comment {
             timestamp: chrono::Utc::now().timestamp(),
             interest_profile,
             length: (random::<f32>() * config.max_comment_length as f32) as i32,
+            engagement_score: 0.0,
         }
     }
 }

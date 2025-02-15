@@ -2,8 +2,6 @@ use nalgebra::DVector;
 use rand::{random, Rng};
 use std::collections::HashMap;
 
-use super::Post;
-
 #[derive(Debug, Clone)]
 pub struct Topic {
     // Represents the Agent's weighted interest in the Topic - an f32 between
@@ -59,8 +57,8 @@ impl InterestProfile {
         filtered
     }
 
-    pub fn update_interest_from_post(&mut self, post: &Post, interest: f32) {
-        for (tag, content_interest) in &post.interest_profile.interests {
+    pub fn update_interest_from_profile(&mut self, profile: &InterestProfile, interest: f32) {
+        for (tag, content_interest) in &profile.interests {
             let weighted_addition = content_interest.weighted_interest * interest;
 
             let topic = self.interests.entry(tag.clone()).or_insert(Topic {

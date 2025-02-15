@@ -49,12 +49,14 @@ pub enum AgentState {
         ticks_required: i32,
         potential_interest_gain: f32,
     },
-    ReadingComment {
+    ReadingComments {
         post_id: usize,
-        comment_id: usize,
         creator_id: usize,
+        current_comment_ids: Vec<usize>,
+        current_comment_index: usize,
         ticks_spent: i32,
         ticks_required: i32,
+        potential_interest_gain: f32,
     },
     CreatingPost {
         post_id: usize,
