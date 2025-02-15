@@ -28,7 +28,11 @@ pub struct Individual {
 }
 
 impl Agent for Individual {
-    fn tick(&mut self, engine: &RecommendationEngine, config: &SimulationConfig) -> Option<Post> {
+    fn tick(
+        &mut self,
+        engine: &mut RecommendationEngine,
+        config: &SimulationConfig,
+    ) -> Option<Post> {
         self.session_length_ticks += 1;
         let (content_option, new_state) = match &self.core.state {
             AgentState::Offline => (None, self.proceed_from_offline(engine, config)),
@@ -89,9 +93,22 @@ impl Agent for Individual {
                     *potential_interest_gain,
                 ),
             ),
-            _ => {
-                unimplemented!()
-            }
+            AgentState::CreatingComment {
+                post_id,
+                comment_id,
+                ticks_spent,
+                ticks_required,
+            } => (
+                None,
+                self.proceed_from_creating_comment(
+                    engine,
+                    config,
+                    *post_id,
+                    *comment_id,
+                    *ticks_spent,
+                    *ticks_required,
+                ),
+            ),
         };
         self.core.state = new_state;
         content_option
@@ -466,6 +483,40 @@ impl Individual {
                     ticks_required,
                 },
             )
+        }
+    }
+
+    fn proceed_from_creating_comment(
+        &mut self,
+        engine: &mut RecommendationEngine,
+        config: &SimulationConfig,
+        post_id: usize,
+        comment_id: usize,
+        mut ticks_spent: i32,
+        ticks_required: i32,
+    ) -> AgentState {
+        ticks_spent += 1;
+
+        if ticks_spent >= ticks_required {
+            let comment = Comment::new(comment_id, self.core.interest_profile.clone(), config);
+
+            engine.add_comment_to_post(post_id, comment);
+
+            // After creating a comment, we might:
+            if self.should_go_offline() {
+                return AgentState::Offline;
+            }
+
+            // Default to going back to scrolling
+            self.proceed_to_scrolling(engine, config)
+        } else {
+            // Continue creating comment
+            AgentState::CreatingComment {
+                post_id,
+                comment_id,
+                ticks_spent,
+                ticks_required,
+            }
         }
     }
 

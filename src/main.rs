@@ -209,7 +209,30 @@ impl SimulationApp {
                                                         .text("Creating Post"),
                                                 );
                                             }
-                                            _ => unimplemented!(),
+                                            AgentState::ReadingComments {
+                                                ticks_spent,
+                                                ticks_required,
+                                                ..
+                                            } => {
+                                                let progress =
+                                                    *ticks_spent as f32 / *ticks_required as f32;
+                                                ui.add(
+                                                    egui::ProgressBar::new(progress)
+                                                        .text("Reading Comments"),
+                                                );
+                                            }
+                                            AgentState::CreatingComment {
+                                                ticks_spent,
+                                                ticks_required,
+                                                ..
+                                            } => {
+                                                let progress =
+                                                    *ticks_spent as f32 / *ticks_required as f32;
+                                                ui.add(
+                                                    egui::ProgressBar::new(progress)
+                                                        .text("Creating Comment"),
+                                                );
+                                            }
                                         }
                                         ui.add_space(10.0);
                                     },

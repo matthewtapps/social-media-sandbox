@@ -11,7 +11,11 @@ pub struct Bot {
 }
 
 impl Agent for Bot {
-    fn tick(&mut self, _engine: &RecommendationEngine, config: &SimulationConfig) -> Option<Post> {
+    fn tick(
+        &mut self,
+        _engine: &mut RecommendationEngine,
+        config: &SimulationConfig,
+    ) -> Option<Post> {
         // Extract data from current creation state
         let (content_option, new_state) = match &self.core.state {
             AgentState::CreatingPost {

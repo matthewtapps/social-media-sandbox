@@ -11,7 +11,11 @@ pub struct Organisation {
 }
 
 impl Agent for Organisation {
-    fn tick(&mut self, _engine: &RecommendationEngine, config: &SimulationConfig) -> Option<Post> {
+    fn tick(
+        &mut self,
+        _engine: &mut RecommendationEngine,
+        config: &SimulationConfig,
+    ) -> Option<Post> {
         let (content_option, new_state) = match &self.core.state {
             AgentState::CreatingPost {
                 post_id,

@@ -136,7 +136,7 @@ impl Simulation {
             let mut new_content = Vec::new();
 
             for agent in self.agents.iter_mut() {
-                if let Some(content) = agent.tick(&self.engine, &self.config) {
+                if let Some(content) = agent.tick(&mut self.engine, &self.config) {
                     new_content.push(content);
                 }
             }

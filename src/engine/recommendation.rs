@@ -143,4 +143,14 @@ impl RecommendationEngine {
 
         post.increase_engagement();
     }
+
+    pub fn add_comment_to_post(&mut self, post_id: usize, comment: Comment) {
+        let post: &mut Post = self
+            .content_pool
+            .iter_mut()
+            .find(|c| c.id == post_id)
+            .unwrap();
+
+        post.comments.push(comment);
+    }
 }
