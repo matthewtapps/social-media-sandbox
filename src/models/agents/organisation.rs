@@ -1,5 +1,8 @@
-use super::{Agent, AgentCore, AgentState, AgentType, InterestProfile, Topic};
-use crate::{models::SimulationConfig, Content, RecommendationEngine};
+use super::{Agent, AgentCore, AgentState, AgentType};
+use crate::{
+    models::{InterestProfile, SimulationConfig, Topic},
+    Content, RecommendationEngine,
+};
 use rand::{random, Rng, RngCore};
 
 #[derive(Debug, Clone)]

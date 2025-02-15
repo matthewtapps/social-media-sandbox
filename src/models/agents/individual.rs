@@ -1,7 +1,10 @@
-use crate::{models::SimulationConfig, Content, RecommendationEngine};
+use crate::{
+    models::{InterestProfile, SimulationConfig},
+    Content, RecommendationEngine,
+};
 use rand::random;
 
-use super::{Agent, AgentCore, AgentState, AgentType, InterestProfile};
+use super::{Agent, AgentCore, AgentState, AgentType};
 
 #[derive(Debug, Clone)]
 pub struct Individual {

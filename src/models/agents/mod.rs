@@ -1,9 +1,9 @@
-mod bot;
-mod common;
-mod individual;
-mod organisation;
+pub mod bot;
+pub mod common;
+pub mod individual;
+pub mod organisation;
 
-pub use bot::Bot;
+pub use bot::*;
 pub use common::*;
-pub use individual::Individual;
-pub use organisation::Organisation;
+pub use individual::*;
+pub use organisation::*;
