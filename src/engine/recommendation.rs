@@ -2,7 +2,6 @@ use crate::models::content::Comment;
 use crate::models::Agent;
 use nalgebra::DVector;
 
-use crate::models::Individual;
 use crate::models::Post;
 use std::collections::HashMap;
 
@@ -50,12 +49,7 @@ impl RecommendationEngine {
             .map(|post| post.comments.iter().collect())
     }
 
-    pub fn calculate_content_score(
-        &self,
-        content: &Post,
-        agent: &Individual,
-        current_time: i64,
-    ) -> f32 {
+    pub fn calculate_content_score(&self, content: &Post, agent: Agent, current_time: i64) -> f32 {
         let interest_alignment = self.calculate_vector_similarity(
             &agent.interest_profile().vector_representation,
             &content.interest_profile.vector_representation,
@@ -87,7 +81,7 @@ impl RecommendationEngine {
 
     pub fn get_post_recommendations(
         &self,
-        agent: &Individual,
+        agent: Agent,
         count: usize,
         current_time: i64,
     ) -> Vec<usize> {

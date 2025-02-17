@@ -1,9 +1,9 @@
-pub mod bot;
-pub mod common;
+pub mod agent;
+pub mod errors;
 pub mod individual;
-pub mod organisation;
+pub mod states;
 
-pub use bot::*;
-pub use common::*;
+pub use agent::*;
+pub use errors::*;
 pub use individual::*;
-pub use organisation::*;
+pub use states::*;

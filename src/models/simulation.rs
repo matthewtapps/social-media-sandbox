@@ -1,7 +1,7 @@
 use crate::{models::AgentType, RecommendationEngine};
 use chrono::{DateTime, Utc};
 
-use super::{Agent, Bot, Individual, Organisation};
+use super::{Agent, Individual};
 
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
@@ -70,7 +70,7 @@ impl Default for SimulationConfig {
 pub struct Simulation {
     pub config: SimulationConfig,
     pub engine: RecommendationEngine,
-    pub agents: Vec<Box<dyn Agent>>,
+    pub individuals: Vec<Box<Agent<Individual>>>,
     pub current_tick: DateTime<Utc>,
     pub last_tick: DateTime<Utc>,
 }
