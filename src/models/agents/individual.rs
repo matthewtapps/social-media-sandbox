@@ -38,8 +38,12 @@ pub struct Individual<S> {
 
 impl From<(Individual<Offline>, &RecommendationEngine)> for Individual<Scrolling> {
     fn from((agent, engine): (Individual<Offline>, &RecommendationEngine)) -> Self {
-        let recommended_posts =
-            engine.get_post_recommendations(agent, 10, chrono::Utc::now().timestamp());
+        let recommended_posts = engine.get_post_recommendations(
+            &agent.core.interest_profile,
+            agent.individual_core.viewed_content,
+            10,
+            chrono::Utc::now().timestamp(),
+        );
         Individual {
             individual_core: agent.individual_core,
             core: agent.core,
@@ -91,13 +95,13 @@ impl Individual<Scrolling> {
     fn select_comment_on_post(&self, engine: &RecommendationEngine) -> Option<ReadingComments> {
         let post = self.select_post(engine).unwrap();
 
-        if let Some(comment_ids) = engine.get_comment_recommendations(post.id, Vec::new(), 10) {
-            if !comment_ids.is_empty() {
-                if let Some(first_comment) = post.comments.iter().find(|c| c.id == comment_ids[0]) {
+        if let Some(comments) = engine.get_comment_recommendations(post.id, Vec::new(), 10) {
+            if !comments.is_empty() {
+                if let Some(first_comment) = post.comments.iter().find(|c| c.id == comments[0].id) {
                     return Some(ReadingComments {
                         post_id: post.id,
                         creator_id: post.creator_id,
-                        current_comment_ids: comment_ids,
+                        current_comment_ids: comments.iter().map(|c| c.id).collect(),
                         current_comment_index: 0,
                         ticks_spent: 0,
                         ticks_required: (first_comment.length as f32
@@ -189,21 +193,20 @@ impl TryFrom<(Individual<Scrolling>, &RecommendationEngine)> for Individual<Read
             .select_post(engine)
             .ok_or(TransitionError::NoPostAvailable)?;
 
+        let selected_comments = engine
+            .get_comment_recommendations(post.id, Vec::new(), 10)
+            .ok_or(TransitionError::NoCommentsAvailable)?;
+
         Ok(Individual {
             individual_core: agent.individual_core,
             core: agent.core,
-            state: ReadingComments {
-                creator_id: post.creator_id,
-                post_id: post.id,
-                current_comment_ids: post.comments.iter().map(|comment| comment.id).collect(),
-                current_comment_index: 0,
-                ticks_spent: 0,
-                ticks_required: (post.comments[0].length as f32
-                    * (1.0 - agent.individual_core.read_speed))
-                    as i32,
-                potential_interest_gain: agent
-                    .calculate_potential_interest_gain_from_comment(&post.comments[0], engine),
-            },
+            state: ReadingComments::new(
+                &post,
+                selected_comments,
+                agent.individual_core.read_speed,
+                &agent.core.interest_profile,
+                engine,
+            ),
         })
     }
 }

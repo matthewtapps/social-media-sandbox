@@ -1,5 +1,4 @@
-use crate::models::content::Comment;
-use crate::models::Agent;
+use crate::{models::content::Comment, InterestProfile};
 use nalgebra::DVector;
 
 use crate::models::Post;
@@ -49,16 +48,21 @@ impl RecommendationEngine {
             .map(|post| post.comments.iter().collect())
     }
 
-    pub fn calculate_content_score(&self, content: &Post, agent: Agent, current_time: i64) -> f32 {
+    pub fn calculate_content_score(
+        &self,
+        post: &Post,
+        agent_interest_profile: &InterestProfile,
+        current_time: i64,
+    ) -> f32 {
         let interest_alignment = self.calculate_vector_similarity(
-            &agent.interest_profile().vector_representation,
-            &content.interest_profile.vector_representation,
+            &agent_interest_profile.vector_representation,
+            &post.interest_profile.vector_representation,
         );
 
-        let hours_old = (current_time - content.timestamp) as f32 / 3600.0;
+        let hours_old = (current_time - post.timestamp) as f32 / 3600.0;
         let recency_score = (-0.05 * hours_old).exp(); // Decay by ~5% per hour
 
-        let engagement_score = content.engagement_score; // Assuming this is already normalized 0.0-1.0
+        let engagement_score = post.engagement_score; // Assuming this is already normalized 0.0-1.0
 
         let score = interest_alignment * self.config.interest_weight
             + recency_score * self.config.recency_weight
@@ -81,16 +85,17 @@ impl RecommendationEngine {
 
     pub fn get_post_recommendations(
         &self,
-        agent: Agent,
+        interest_profile: &InterestProfile,
+        viewed_posts: Vec<usize>,
         count: usize,
         current_time: i64,
     ) -> Vec<usize> {
         let mut scored_posts: Vec<(usize, f32)> = self
             .content_pool
             .iter()
-            .filter(|content| !agent.viewed_content.contains(&content.id))
+            .filter(|content| !viewed_posts.contains(&content.id))
             .map(|content| {
-                let score = self.calculate_content_score(content, agent, current_time);
+                let score = self.calculate_content_score(content, interest_profile, current_time);
                 (content.id, score)
             })
             .collect();
@@ -109,22 +114,19 @@ impl RecommendationEngine {
         post_id: usize,
         current_comment_ids: Vec<usize>,
         count: usize,
-    ) -> Option<Vec<usize>> {
+    ) -> Option<Vec<&Comment>> {
         self.get_content_by_id(post_id).map(|post| {
             let current_ids: std::collections::HashSet<_> =
                 current_comment_ids.into_iter().collect();
 
-            let mut comments: Vec<(&Comment, usize)> = post
+            let mut comments: Vec<_> = post
                 .comments
                 .iter()
                 .filter(|comment| !current_ids.contains(&comment.id))
-                .map(|comment| (comment, comment.id))
                 .collect();
 
-            comments.sort_by(|(a, _), (b, _)| {
-                b.engagement_score.partial_cmp(&a.engagement_score).unwrap()
-            });
-            comments.into_iter().take(count).map(|(_, id)| id).collect()
+            comments.sort_by(|a, b| b.engagement_score.partial_cmp(&a.engagement_score).unwrap());
+            comments.into_iter().take(count).collect()
         })
     }
 
