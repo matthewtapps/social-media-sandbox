@@ -196,12 +196,12 @@ impl IndividualAgent<Scrolling> {
         let scored_recommendations: Vec<_> = recommended_post_ids
             .iter()
             .map(|id| {
-                let content = engine.get_content_by_id(*id).unwrap();
+                let post = engine.get_content_by_id(*id).unwrap();
                 let similarity = engine.calculate_vector_similarity(
                     &agent_vector,
-                    &content.interest_profile.vector_representation,
+                    &post.interest_profile.vector_representation,
                 );
-                (content, similarity)
+                (post, similarity)
             })
             .collect();
 
@@ -212,7 +212,7 @@ impl IndividualAgent<Scrolling> {
 
         let mut random_value = random::<f32>() * total_similarity;
 
-        &scored_recommendations.iter().map(|(post, similarity)| {
+        let _ = scored_recommendations.iter().map(|(post, similarity)| {
             random_value -= similarity;
             if random_value < 0.0 {
                 return Some(post);
