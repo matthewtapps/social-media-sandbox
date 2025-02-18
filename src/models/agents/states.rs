@@ -1,40 +1,22 @@
-use crate::{models::content::Comment, InterestProfile, Post, RecommendationEngine};
+use rand::RngCore;
 
-trait Recommendations {
-    fn calculate_required_ticks(length: i32, read_speed: f32) -> i32 {
-        (length as f32 * (1.0 - read_speed)) as i32
-    }
+use crate::{
+    engine::RecommendationsUtils,
+    models::{content::Comment, SimulationConfig},
+    InterestProfile, Post, RecommendationEngine,
+};
 
-    fn calculate_interest_gain(
-        agent_interest_profile: &InterestProfile,
-        content_interest_profile: &InterestProfile,
-        engine: &RecommendationEngine,
-    ) -> f32 {
-        let base_gain = 0.2;
-
-        let similarity = if agent_interest_profile.interests.is_empty() {
-            0.0
-        } else {
-            engine.calculate_vector_similarity(
-                &agent_interest_profile.vector_representation,
-                &content_interest_profile.vector_representation,
-            )
-        };
-
-        let similarity_multiplier = 1.0 + similarity.min(1.0);
-
-        base_gain * similarity_multiplier
-    }
-}
-
+#[derive(Debug, Clone)]
 pub struct Offline;
 
+#[derive(Debug, Clone)]
 pub struct Scrolling {
     pub recommended_post_ids: Vec<usize>,
 }
 
-impl Recommendations for ReadingPost {}
+impl RecommendationsUtils for ReadingPost {}
 
+#[derive(Debug, Clone)]
 pub struct ReadingPost {
     pub post_id: usize,
     pub creator_id: usize,
@@ -64,8 +46,9 @@ impl ReadingPost {
     }
 }
 
-impl Recommendations for ReadingComments {}
+impl RecommendationsUtils for ReadingComments {}
 
+#[derive(Debug, Clone)]
 pub struct ReadingComments {
     pub post_id: usize,
     pub creator_id: usize,
@@ -100,15 +83,38 @@ impl ReadingComments {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct CreatingPost {
     pub post_id: usize,
     pub ticks_spent: i32,
     pub ticks_required: i32,
 }
 
+impl CreatingPost {
+    pub fn new(write_speed: f32, config: &SimulationConfig) -> Self {
+        CreatingPost {
+            post_id: rand::thread_rng().next_u32() as usize,
+            ticks_spent: 0,
+            ticks_required: (config.base_content_length as f32 * write_speed) as i32,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct CreatingComment {
     pub post_id: usize,
     pub comment_id: usize,
     pub ticks_spent: i32,
     pub ticks_required: i32,
+}
+
+impl CreatingComment {
+    pub fn new(write_speed: f32, config: &SimulationConfig, post_id: usize) -> Self {
+        CreatingComment {
+            post_id,
+            comment_id: rand::thread_rng().next_u32() as usize,
+            ticks_spent: 0,
+            ticks_required: (config.base_content_length as f32 * write_speed) as i32,
+        }
+    }
 }

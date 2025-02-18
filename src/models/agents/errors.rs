@@ -5,6 +5,11 @@ pub enum TransitionError {
     // When we try to read a post but none are available
     NoPostAvailable,
 
+    // When we look up a post by ID but fail
+    PostNotFound {
+        id: usize,
+    },
+
     // When we try to read comments but the post has none
     NoCommentsAvailable,
 
@@ -39,6 +44,9 @@ impl fmt::Display for TransitionError {
         match self {
             TransitionError::NoPostAvailable => {
                 write!(f, "No posts available for reading")
+            }
+            TransitionError::PostNotFound { id } => {
+                write!(f, "Post not found with id {}", id)
             }
             TransitionError::NoCommentsAvailable => {
                 write!(f, "No comments available on the selected post")

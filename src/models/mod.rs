@@ -4,6 +4,6 @@ pub mod interest;
 pub mod simulation;
 
 pub use agents::*;
-pub use content::Post;
+pub use content::*;
 pub use interest::*;
-pub use simulation::{Simulation, SimulationConfig};
+pub use simulation::*;

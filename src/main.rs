@@ -1,7 +1,7 @@
 use eframe::egui;
 use egui::Vec2;
 use social_media_sandbox::{
-    models::{AgentState, AgentType, SimulationConfig},
+    models::{AgentType, SimulationConfig},
     Simulation,
 };
 pub struct SimulationApp {
@@ -43,12 +43,8 @@ impl SimulationApp {
                 self.running = !self.running;
             }
 
-            let current_individuals = self
-                .simulation
-                .agents
-                .iter()
-                .filter(|a| matches!(a.get_type(), AgentType::Individual))
-                .count();
+            let current_individuals = self.simulation.individuals.iter().count();
+
             if ui
                 .add(
                     egui::Slider::new(&mut self.simulation.config.num_individuals, 0..=100)
@@ -62,46 +58,46 @@ impl SimulationApp {
                     AgentType::Individual,
                 );
             }
-
-            let current_bots = self
-                .simulation
-                .agents
-                .iter()
-                .filter(|a| matches!(a.get_type(), AgentType::Bot))
-                .count();
-            if ui
-                .add(
-                    egui::Slider::new(&mut self.simulation.config.num_bots, 0..=100)
-                        .text("Num. Bots"),
-                )
-                .changed()
-            {
-                self.handle_agent_count_change(
-                    self.simulation.config.num_bots,
-                    current_bots,
-                    AgentType::Bot,
-                );
-            }
-
-            let current_orgs = self
-                .simulation
-                .agents
-                .iter()
-                .filter(|a| matches!(a.get_type(), AgentType::Organisation))
-                .count();
-            if ui
-                .add(
-                    egui::Slider::new(&mut self.simulation.config.num_organisations, 0..=100)
-                        .text("Num. Organisations"),
-                )
-                .changed()
-            {
-                self.handle_agent_count_change(
-                    self.simulation.config.num_organisations,
-                    current_orgs,
-                    AgentType::Organisation,
-                );
-            }
+            //
+            // let current_bots = self
+            //     .simulation
+            //     .agents
+            //     .iter()
+            //     .filter(|a| matches!(a.get_type(), AgentType::Bot))
+            //     .count();
+            // if ui
+            //     .add(
+            //         egui::Slider::new(&mut self.simulation.config.num_bots, 0..=100)
+            //             .text("Num. Bots"),
+            //     )
+            //     .changed()
+            // {
+            //     self.handle_agent_count_change(
+            //         self.simulation.config.num_bots,
+            //         current_bots,
+            //         AgentType::Bot,
+            //     );
+            // }
+            //
+            // let current_orgs = self
+            //     .simulation
+            //     .agents
+            //     .iter()
+            //     .filter(|a| matches!(a.get_type(), AgentType::Organisation))
+            //     .count();
+            // if ui
+            //     .add(
+            //         egui::Slider::new(&mut self.simulation.config.num_organisations, 0..=100)
+            //             .text("Num. Organisations"),
+            //     )
+            //     .changed()
+            // {
+            //     self.handle_agent_count_change(
+            //         self.simulation.config.num_organisations,
+            //         current_orgs,
+            //         AgentType::Organisation,
+            //     );
+            // }
 
             ui.add(
                 egui::Slider::new(&mut self.simulation.config.base_content_length, 0..=100)
@@ -154,86 +150,28 @@ impl SimulationApp {
             ui.set_max_height(ctx.available_rect().height() / 2.0);
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    for agent in &self.simulation.agents {
-                        let agent_id = *agent.id();
+                    for individual in &self.simulation.individuals {
+                        let id = individual.agent.id();
                         ui.allocate_ui(Vec2 { x: 150.0, y: 180.0 }, |ui| {
                             ui.vertical(|ui| {
                                 ui.add_space(10.0);
                                 // Top section for icon
                                 ui.vertical_centered(|ui| {
-                                    let response = match agent.get_type() {
-                                        AgentType::Bot => draw_bot_icon(ui),
-                                        AgentType::Organisation => draw_org_icon(ui),
-                                        AgentType::Individual => draw_person_icon(ui),
-                                    };
-                                    if response.clicked()
-                                        && !self.open_agent_windows.contains(&agent_id)
+                                    let response = draw_person_icon(ui);
+                                    if response.clicked() && !self.open_agent_windows.contains(&id)
                                     {
-                                        self.open_agent_windows.push(agent_id);
+                                        self.open_agent_windows.push(id);
                                     }
                                 });
 
                                 ui.with_layout(
                                     egui::Layout::bottom_up(egui::Align::Center),
                                     |ui| {
-                                        match agent.state() {
-                                            AgentState::Offline => {
-                                                ui.add(egui::ProgressBar::new(0.0).text("Offline"));
-                                            }
-                                            AgentState::Scrolling { .. } => {
-                                                ui.add(
-                                                    egui::ProgressBar::new(0.0).text("Scrolling"),
-                                                );
-                                            }
-                                            AgentState::ReadingPost {
-                                                ticks_spent,
-                                                ticks_required,
-                                                ..
-                                            } => {
-                                                let progress =
-                                                    *ticks_spent as f32 / *ticks_required as f32;
-                                                ui.add(
-                                                    egui::ProgressBar::new(progress)
-                                                        .text("Reading Post"),
-                                                );
-                                            }
-                                            AgentState::CreatingPost {
-                                                ticks_spent,
-                                                ticks_required,
-                                                ..
-                                            } => {
-                                                let progress =
-                                                    *ticks_spent as f32 / *ticks_required as f32;
-                                                ui.add(
-                                                    egui::ProgressBar::new(progress)
-                                                        .text("Creating Post"),
-                                                );
-                                            }
-                                            AgentState::ReadingComments {
-                                                ticks_spent,
-                                                ticks_required,
-                                                ..
-                                            } => {
-                                                let progress =
-                                                    *ticks_spent as f32 / *ticks_required as f32;
-                                                ui.add(
-                                                    egui::ProgressBar::new(progress)
-                                                        .text("Reading Comments"),
-                                                );
-                                            }
-                                            AgentState::CreatingComment {
-                                                ticks_spent,
-                                                ticks_required,
-                                                ..
-                                            } => {
-                                                let progress =
-                                                    *ticks_spent as f32 / *ticks_required as f32;
-                                                ui.add(
-                                                    egui::ProgressBar::new(progress)
-                                                        .text("Creating Comment"),
-                                                );
-                                            }
-                                        }
+                                        let progress = individual.agent.progress().unwrap_or(0.0);
+                                        ui.add(
+                                            egui::ProgressBar::new(progress)
+                                                .text(individual.agent.state_name()),
+                                        );
                                         ui.add_space(10.0);
                                     },
                                 );
@@ -245,53 +183,49 @@ impl SimulationApp {
         });
 
         self.open_agent_windows.retain(|&agent_id| {
-            if let Some(agent) = self.simulation.agents.iter().find(|a| *a.id() == agent_id) {
+            if let Some(individual) = self
+                .simulation
+                .individuals
+                .iter()
+                .find(|i| i.agent.id() == agent_id)
+            {
                 let mut window_open = true;
                 egui::Window::new(format!("Agent {}", agent_id))
                     .open(&mut window_open)
                     .show(ctx, |ui| {
-                        ui.label(format!("Type: {:?}", agent.get_type()));
+                        // Display agent type info
+                        ui.label(format!("ID: {}", individual.agent.id()));
                         ui.separator();
+
+                        // Display interest profile
                         egui::Frame::new().show(ui, |ui| {
                             ui.heading("Interests");
                             ui.set_height(200.0);
-                            draw_spider_chart(
-                                ui,
-                                &agent
-                                    .interest_profile()
+
+                            // Use with_agent to safely access interest profile
+                            let interests = individual.agent.with_agent(|agent| {
+                                agent
+                                    .interests()
                                     .interests
                                     .iter()
                                     .map(|(tag, topic)| (tag.clone(), topic.weighted_interest))
-                                    .collect::<Vec<_>>(),
-                            );
+                                    .collect::<Vec<_>>()
+                            });
+
+                            draw_spider_chart(ui, &interests);
                         });
+
                         ui.separator();
                         ui.heading("Activity");
-                        ui.label(match &agent.state() {
-                            AgentState::Offline => "Offline".to_string(),
-                            AgentState::Scrolling { .. } => "Scrolling Feed".to_string(),
-                            AgentState::ReadingPost {
-                                ticks_spent,
-                                ticks_required,
-                                ..
-                            } => {
-                                format!(
-                                    "Reading Post ({}%)",
-                                    (*ticks_spent as f32 / *ticks_required as f32 * 100.0) as i32
-                                )
-                            }
-                            AgentState::CreatingPost {
-                                ticks_spent,
-                                ticks_required,
-                                ..
-                            } => {
-                                format!(
-                                    "Creating Post ({}%)",
-                                    (*ticks_spent as f32 / *ticks_required as f32 * 100.0) as i32
-                                )
-                            }
-                            _ => "".to_string(),
-                        });
+
+                        // Display state and progress information
+                        let state_name = individual.agent.state_name();
+                        if let Some(progress) = individual.agent.progress() {
+                            let percentage = (progress * 100.0) as i32;
+                            ui.label(format!("{} ({}%)", state_name, percentage));
+                        } else {
+                            ui.label(state_name);
+                        }
                     });
                 window_open
             } else {
@@ -337,12 +271,12 @@ impl SimulationApp {
         match new_value.cmp(&current_count) {
             std::cmp::Ordering::Greater => {
                 for _ in 0..(new_value - current_count) {
-                    self.simulation.add_agent(agent_type);
+                    self.simulation.add_agent(agent_type.clone());
                 }
             }
             std::cmp::Ordering::Less => {
                 for _ in 0..(current_count - new_value) {
-                    self.simulation.remove_agent(agent_type);
+                    self.simulation.remove_agent(agent_type.clone());
                 }
             }
             std::cmp::Ordering::Equal => {}

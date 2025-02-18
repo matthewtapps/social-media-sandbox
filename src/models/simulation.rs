@@ -1,7 +1,7 @@
-use crate::{models::AgentType, RecommendationEngine};
+use crate::RecommendationEngine;
 use chrono::{DateTime, Utc};
 
-use super::{Agent, Individual};
+use super::{AgentType, Individual};
 
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
@@ -70,7 +70,7 @@ impl Default for SimulationConfig {
 pub struct Simulation {
     pub config: SimulationConfig,
     pub engine: RecommendationEngine,
-    pub individuals: Vec<Box<Agent<Individual>>>,
+    pub individuals: Vec<Individual>,
     pub current_tick: DateTime<Utc>,
     pub last_tick: DateTime<Utc>,
 }
@@ -78,8 +78,7 @@ pub struct Simulation {
 impl Simulation {
     pub fn new(config: SimulationConfig) -> Self {
         let mut engine = RecommendationEngine::new();
-        let mut agents: Vec<Box<dyn Agent>> = Vec::new();
-        let mut id_counter = 0;
+        let mut individuals: Vec<Individual> = Vec::new();
 
         let sample_tags = vec![
             "politics",
@@ -98,21 +97,7 @@ impl Simulation {
         }
 
         for _ in 0..config.num_individuals {
-            let agent = Individual::new(id_counter, &config, &engine);
-            agents.push(Box::new(agent));
-            id_counter += 1;
-        }
-
-        for _ in 0..config.num_bots {
-            let agent = Bot::new(id_counter, &config);
-            agents.push(Box::new(agent));
-            id_counter += 1;
-        }
-
-        for _ in 0..config.num_organisations {
-            let agent = Organisation::new(id_counter, &config);
-            agents.push(Box::new(agent));
-            id_counter += 1;
+            individuals.push(Individual::new());
         }
 
         let now = Utc::now();
@@ -120,7 +105,7 @@ impl Simulation {
         Simulation {
             config,
             engine,
-            agents,
+            individuals,
             current_tick: now,
             last_tick: now,
         }
@@ -131,84 +116,40 @@ impl Simulation {
         let elapsed = (self.current_tick - self.last_tick).num_milliseconds();
 
         if elapsed >= self.config.tick_rate_ms as i64 {
+            let individuals = std::mem::take(&mut self.individuals);
+
             self.last_tick = self.current_tick;
 
-            for agent in self.agents.iter_mut() {
-                agent.tick(&mut self.engine, &self.config);
-            }
+            self.individuals = individuals
+                .into_iter()
+                .map(|individual| individual.tick(&self.engine))
+                .collect();
         }
     }
 
     pub fn add_agent(&mut self, agent_type: AgentType) {
-        let id = self.agents.len();
-        let new_agent: Box<dyn Agent> = match agent_type {
-            AgentType::Individual => Box::new(Individual::new(id, &self.config, &self.engine)),
-            AgentType::Bot => Box::new(Bot::new(id, &self.config)),
-            AgentType::Organisation => Box::new(Organisation::new(id, &self.config)),
-        };
-        self.agents.push(new_agent);
+        match agent_type {
+            AgentType::Individual => {
+                self.add_individual();
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    fn add_individual(&mut self) {
+        self.individuals.push(Individual::new())
     }
 
     pub fn remove_agent(&mut self, agent_type: AgentType) {
-        if let Some(pos) = self
-            .agents
-            .iter()
-            .rposition(|agent| agent.get_type() == agent_type)
-        {
-            self.agents.remove(pos);
+        match agent_type {
+            AgentType::Individual => {
+                self.remove_individual();
+            }
+            _ => unimplemented!(),
         }
     }
 
-    pub fn print_statistics(&self) {
-        println!("\nTick {:?}", self.current_tick);
-        println!("Content pool size: {}", self.engine.content_pool.len());
-
-        // Print some engagement statistics
-        let avg_engagement: f32 = self
-            .engine
-            .content_pool
-            .iter()
-            .map(|c| c.engagement_score)
-            .sum::<f32>()
-            / self.engine.content_pool.len() as f32;
-
-        println!("Average engagement score: {:.2}", avg_engagement);
-
-        // Print statistics for different agent types
-        let (individual_count, bot_count, organisation_count) = self.agents.iter().fold(
-            (0, 0, 0),
-            |(individual, bot, organisation), agent| match agent.get_type() {
-                AgentType::Individual => (individual + 1, bot, organisation),
-                AgentType::Bot => (individual, bot + 1, organisation),
-                AgentType::Organisation => (individual, bot, organisation + 1),
-            },
-        );
-
-        println!("Number of Individual agents: {}", individual_count);
-        println!("Number of Bot agents: {}", bot_count);
-        println!("Number of Organisation agents: {}", organisation_count);
-
-        // Print some example agent states
-        for agent in &self.agents {
-            match agent.get_type() {
-                AgentType::Individual => {
-                    println!("\nIndividual State:");
-                    println!("\nState: {:?}", agent.state());
-                    println!("Interests: {:?}", agent.interest_profile());
-                    println!(
-                        "Preferred creators: {:?}",
-                        agent.preferred_creators().unwrap()
-                    );
-                } // AgentType::Organisation => {
-                //     println!("\nOrganisation State:");
-                //     println!("Interests: {:?}", agent.interests());
-                // }
-                // AgentType::Bot => {
-                //     println!("\nBot State:");
-                //     println!("Interests: {:?}", agent.interests());
-                // }
-                _ => (),
-            }
-        }
+    fn remove_individual(&mut self) {
+        self.individuals.pop();
     }
 }

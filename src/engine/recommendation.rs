@@ -86,7 +86,7 @@ impl RecommendationEngine {
     pub fn get_post_recommendations(
         &self,
         interest_profile: &InterestProfile,
-        viewed_posts: Vec<usize>,
+        viewed_posts: &Vec<usize>,
         count: usize,
         current_time: i64,
     ) -> Vec<usize> {
@@ -154,3 +154,32 @@ impl RecommendationEngine {
         self.content_pool.push(post);
     }
 }
+
+pub trait RecommendationsUtils {
+    fn calculate_required_ticks(length: i32, read_speed: f32) -> i32 {
+        (length as f32 * (1.0 - read_speed)) as i32
+    }
+
+    fn calculate_interest_gain(
+        agent_interest_profile: &InterestProfile,
+        content_interest_profile: &InterestProfile,
+        engine: &RecommendationEngine,
+    ) -> f32 {
+        let base_gain = 0.2;
+
+        let similarity = if agent_interest_profile.interests.is_empty() {
+            0.0
+        } else {
+            engine.calculate_vector_similarity(
+                &agent_interest_profile.vector_representation,
+                &content_interest_profile.vector_representation,
+            )
+        };
+
+        let similarity_multiplier = 1.0 + similarity.min(1.0);
+
+        base_gain * similarity_multiplier
+    }
+}
+
+impl RecommendationsUtils for RecommendationEngine {}

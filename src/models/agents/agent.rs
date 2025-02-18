@@ -1,11 +1,13 @@
+use rand::{random, RngCore};
+
 use crate::models::InterestProfile;
 use std::fmt::Debug;
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone)]
 pub enum AgentType {
     Individual,
-    Bot,
     Organisation,
+    Bot,
 }
 
 #[derive(Debug, Clone)]
@@ -18,4 +20,21 @@ pub struct AgentCore {
     // Determines the interest profile of any content created, which is used for
     // content recommendations and updates of consumer interests
     pub interest_profile: InterestProfile,
+}
+
+impl AgentCore {
+    pub fn new() -> Self {
+        Self {
+            id: rand::thread_rng().next_u32() as usize,
+            content_creation_frequency: random(),
+            created_content: Vec::new(),
+            create_speed: random(),
+            interest_profile: InterestProfile::new(100),
+        }
+    }
+}
+
+pub trait AgentAccessors {
+    fn id(&self) -> usize;
+    fn interests(&self) -> &InterestProfile;
 }
